@@ -19,6 +19,7 @@ import { computeSummary } from './summary.js';
 import { CATEGORIES, kindOf } from './classify.js';
 import { validateLoan } from './loans.js';
 import { validateBuckets } from './buckets.js';
+import { exportCsv, EXPORTS } from './export.js';
 import { demoState } from './demo.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -169,11 +170,16 @@ const routes = [
     return { ok: true };
   }],
 
+  // Any of: syncHours, reportName (whose report it is), reportNotes (notes for the advisor).
   ['POST', /^\/api\/settings$/, async (req) => {
-    const { syncHours } = await readJson(req);
-    const h = Number(syncHours);
-    if (!(h >= 1 && h <= 168)) throw httpError(400, 'Sync every 1 to 168 hours.');
-    state.settings.syncHours = h;
+    const body = await readJson(req);
+    if ('syncHours' in body) {
+      const h = Number(body.syncHours);
+      if (!(h >= 1 && h <= 168)) throw httpError(400, 'Sync every 1 to 168 hours.');
+      state.settings.syncHours = h;
+    }
+    if ('reportName' in body) state.settings.reportName = String(body.reportName || '').trim().slice(0, 120);
+    if ('reportNotes' in body) state.settings.reportNotes = String(body.reportNotes || '').slice(0, 5000);
     persist();
     return { ok: true };
   }],
@@ -395,6 +401,14 @@ const server = createServer(async (req, res) => {
       if (req.method !== 'GET') {
         if (!sameOrigin(req)) return send(res, 403, { error: 'Cross-site request refused.' });
         if (!/^application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'Send JSON.' });
+      }
+      const csv = /^\/api\/export\/(\w+)\.csv$/.exec(url.pathname);
+      if (csv && req.method === 'GET' && EXPORTS[csv[1]]) {
+        res.writeHead(200, {
+          'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+          'Content-Disposition': `attachment; filename="fintrack-${csv[1]}-${new Date().toISOString().slice(0, 10)}.csv"`,
+        });
+        return res.end('\uFEFF' + exportCsv(csv[1], { ...computeSummary(state) }));
       }
       for (const [method, re, handler] of routes) {
         const m = re.exec(url.pathname);

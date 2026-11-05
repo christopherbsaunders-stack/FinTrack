@@ -78,6 +78,7 @@ export function computeSummary(state, now = new Date()) {
     lastPriceSync: state.lastPriceSync || null,
     hasPriced: accounts.some((a) => a.source === 'priced'),
     syncHours: state.settings?.syncHours,
+    report: { name: state.settings?.reportName || '', notes: state.settings?.reportNotes || '' },
     totals: {
       netWorth, assets, liabilities,
       cash: cat('cash'),

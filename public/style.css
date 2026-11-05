@@ -224,3 +224,5 @@ td.center, th.center { text-align: center; }
 .bucket-form td:first-child input { width: 100%; min-width: 150px; text-transform: none; }
 .gain-edit { font-weight: inherit; font-size: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
 .gain-edit .up, .gain-edit .down { color: inherit; }
+a.btn-link { font-weight: 600; font-size: 13px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); text-decoration: none; }
+a.btn-link:hover { border-color: var(--muted); }
