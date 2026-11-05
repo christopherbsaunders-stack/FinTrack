@@ -225,7 +225,8 @@ const routes = [
     if (kindOf(a.category) !== 'liability') throw httpError(400, 'Loan details are for debts.');
     const { loan } = await readJson(req);
     if (loan === null) a.loan = null;
-    else { try { a.loan = validateLoan(loan || {}); } catch (err) { throw httpError(400, err.message); } }
+    // Only a mortgage carries escrow; a car or student loan's payment is all loan.
+    else { try { a.loan = validateLoan({ ...(loan || {}), ...(a.category === 'mortgage' ? {} : { escrow: 0 }) }); } catch (err) { throw httpError(400, err.message); } }
     persist();
     return { ok: true };
   }],

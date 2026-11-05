@@ -458,7 +458,7 @@ function drawLoan(card, l) {
     ${l.warnings.map((x) => `<div class="notice loan-warn">${esc(x)}</div>`).join('')}
     <div class="loan-tiles">
       <div class="tile"><div class="label">Left to pay</div><div class="v">${fmt(l.balance)}</div><div class="s">${l.loan.original ? `${Math.round((1 - l.balance / l.loan.original) * 100)}% of ${fmt(l.loan.original)} paid off` : 'Principal, from your lender'}</div></div>
-      <div class="tile"><div class="label">Monthly payment</div><div class="v">${fmtCents(l.payment)}</div><div class="s">${fmtCents(l.pi)} loan + ${fmtCents(l.escrow)} escrow</div></div>
+      <div class="tile"><div class="label">Monthly payment</div><div class="v">${fmtCents(l.payment)}</div><div class="s">${l.escrow > 0 ? `${fmtCents(l.pi)} loan + ${fmtCents(l.escrow)} escrow` : 'All of it goes to the loan'}</div></div>
       <div class="tile"><div class="label">Next payment (${monthLabel(l.nextPayment.month)})</div>
         <div class="split" role="img" aria-label="Interest ${fmtCents(l.nextPayment.interest)}, principal ${fmtCents(l.nextPayment.principal)}">
           <span style="width:${(l.nextPayment.interest / total) * 100}%;background:var(--s2)"></span><span style="width:${(l.nextPayment.principal / total) * 100}%;background:var(--s1)"></span></div>
@@ -486,7 +486,7 @@ function drawLoan(card, l) {
       <div class="ytd-row">
         <div>Interest<b>${fmtCents(l.ytd.interest)}</b></div>
         <div>Principal<b>${fmtCents(l.ytd.principal)}</b></div>
-        <div>Escrow<b>${fmtCents(l.ytd.escrow)}</b></div>
+        ${l.escrow > 0 ? `<div>Escrow<b>${fmtCents(l.ytd.escrow)}</b></div>` : ''}
       </div>
       <p class="small muted">${l.ytd.estimated ? `Estimated from your rate, payment and today's balance, assuming the regular payment each month. FinTrack will use your real balances once it has tracked this loan since January 1.` : 'From your balances and the payments your lender reports.'}${l.category === 'mortgage' ? " Your lender's Form 1098 has the exact interest for taxes." : ''}</p>
     </div>
@@ -579,6 +579,10 @@ function openLoan(a) {
   $('lRate').value = ln.rate ?? '';
   $('lPayment').value = ln.payment ?? '';
   $('lEscrow').value = ln.escrow ?? '';
+  // Only a mortgage has escrow (taxes and insurance paid through the lender).
+  const hasEscrow = a.category === 'mortgage';
+  $('lEscrowWrap').hidden = !hasEscrow;
+  $('lEscrowNote').hidden = !hasEscrow;
   $('lOriginal').value = ln.original ?? '';
   $('lTerm').value = ln.termYears ?? '';
   $('lFirst').value = ln.firstPayment ?? '';
@@ -593,8 +597,14 @@ function loanHelp() {
   const num = (id) => Number(String($(id).value).replace(/[$,%\s]/g, ''));
   const rate = num('lRate'), original = num('lOriginal'), term = num('lTerm'), payment = num('lPayment');
   const help = $('lHelp');
-  if (!(rate >= 0 && original > 0 && term > 0)) { help.innerHTML = '<span class="muted">With these, FinTrack shows your original payoff date, and can work out the escrow from your payment.</span>'; return; }
+  const hasEscrow = loanAccount?.category === 'mortgage';
+  if (!(rate >= 0 && original > 0 && term > 0)) { help.innerHTML = `<span class="muted">With these, FinTrack shows your original payoff date${hasEscrow ? ', and can work out the escrow from your payment' : ''}.</span>`; return; }
   const pi = scheduledPayment(original, rate, Math.round(term * 12));
+  if (!hasEscrow) {
+    const over = payment - pi;
+    help.innerHTML = `Scheduled payment: <b>${fmtCents(pi)}</b>.${over >= 1 ? ` You pay ${fmtCents(over)} more than that each month, which goes to principal.` : ''}`;
+    return;
+  }
   const guess = payment > pi ? Math.round((payment - pi) * 100) / 100 : null;
   help.innerHTML = `Scheduled principal and interest: <b>${fmtCents(pi)}</b>.${guess != null ? ` So escrow is probably about <b>${fmtCents(guess)}</b> <button type="button" class="linkish" id="lUseGuess">Use it</button>` : ''}`;
   $('lUseGuess')?.addEventListener('click', () => { $('lEscrow').value = guess; });
@@ -609,7 +619,7 @@ $('lRemove').addEventListener('click', async () => {
 });
 $('loanForm').addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  const loan = { rate: $('lRate').value, payment: $('lPayment').value, escrow: $('lEscrow').value, original: $('lOriginal').value, termYears: $('lTerm').value, firstPayment: $('lFirst').value };
+  const loan = { rate: $('lRate').value, payment: $('lPayment').value, escrow: loanAccount.category === 'mortgage' ? $('lEscrow').value : 0, original: $('lOriginal').value, termYears: $('lTerm').value, firstPayment: $('lFirst').value };
   try {
     await api(`/api/accounts/${encodeURIComponent(loanAccount.id)}/loan`, { method: 'PUT', body: JSON.stringify({ loan }) });
     $('loanDlg').close();

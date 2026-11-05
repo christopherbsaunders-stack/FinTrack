@@ -130,9 +130,9 @@
       <div class="form-grid">
         <label>Interest rate (%) <input id="lRate" inputmode="decimal" placeholder="6.125" required></label>
         <label>Monthly payment, all of it ($) <input id="lPayment" inputmode="decimal" placeholder="2400" required></label>
-        <label>Escrow in that payment ($) <input id="lEscrow" inputmode="decimal" placeholder="Taxes, insurance, PMI"></label>
+        <label id="lEscrowWrap">Escrow in that payment ($) <input id="lEscrow" inputmode="decimal" placeholder="Taxes, insurance, PMI"></label>
       </div>
-      <p class="muted small">Escrow is the part of the payment for property taxes, homeowner's insurance and any PMI. It doesn't pay down the loan. Your statement shows it as "escrow".</p>
+      <p class="muted small" id="lEscrowNote">Escrow is the part of the payment for property taxes, homeowner's insurance and any PMI. It doesn't pay down the loan. Your statement shows it as "escrow".</p>
       <fieldset>
         <legend>Optional: the original loan</legend>
         <div class="form-grid">
