@@ -33,6 +33,10 @@ const PASSWORD = process.env.FINTRACK_PASSWORD || '';
 const CHECK_EVERY_MS = 10 * 60 * 1000;
 
 let state = DEMO ? demoState() : loadState(DATA_FILE);
+// Work out today's values from what's saved (no network), so anything the
+// dashboard computes from them (the 401(k) chart, home value) shows right
+// after an update, without waiting for the next sync.
+if (!DEMO) { try { revaluePriced(state); } catch (err) { console.error(`[start] ${err.message}`); } }
 let syncing = null;
 
 function persist() { if (!DEMO) saveState(DATA_FILE, state); }
