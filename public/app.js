@@ -531,7 +531,7 @@ function renderBuckets() {
     head = `<div class="emergency">
       <div><div class="label">Emergency fund</div><div class="big2">${fmt(em.value)}</div></div>
       <div class="em-months">${m == null ? '<span class="muted">Enter your monthly expenses in Buckets to see how long it would last.</span>'
-        : `Covers <b>${m.toFixed(1)} months</b> of expenses at ${fmt(em.expenses)} a month<span class="muted">${em.source === 'entered' ? ' (the amount you entered)' : ` (your average spending over the last ${em.measured.months} months: what left your tracked accounts, including money you sent to accounts FinTrack doesn't track)`}</span>.
+        : `Covers <b>${m.toFixed(1)} months</b> of expenses at ${fmt(em.expenses)} a month<span class="muted">${em.source === 'entered' ? ' (the amount you entered)' : ` (your average spending over the last ${em.measured.months} months, from your tracked accounts only: bills paid from an account FinTrack doesn't see aren't in it)`}</span>.
            <span class="muted">A common guide is 3 to 6 months.</span>`}</div></div>`;
   }
   $('bucketList').innerHTML = head + list.map((b) => `
@@ -595,7 +595,7 @@ function openBuckets(a) {
   const em = list.find((b) => b.emergency);
   $('bExpenses').value = em?.expenses ?? '';
   const measured = data.emergency?.measured;
-  $('bExpensesHint').textContent = measured ? `Leave this empty to use your measured spending, about ${fmt(measured.amount)} a month: what leaves your tracked accounts, including money you send to an untracked joint account. Enter a number instead if the fund should cover more, such as all of a household's bills.` : '';
+  $('bExpensesHint').textContent = measured ? `Leave this empty to use your measured spending, about ${fmt(measured.amount)} a month. That only counts what leaves your tracked checking, savings and cards: money that never reaches them, such as part of a paycheck deposited straight into a joint account for bills, and the bills paid from there, isn't in it. If that's you, enter your real monthly expenses here.` : '';
   $('bRemoveAll').hidden = !a.buckets?.length;
   updateBucketForm();
   $('bucketsDlg').showModal();

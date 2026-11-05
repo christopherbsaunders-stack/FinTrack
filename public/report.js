@@ -165,7 +165,7 @@ function render() {
       <table><thead><tr><th>Month</th><th class="n">Money in</th><th class="n">Money out</th><th class="n">Net</th></tr></thead><tbody>
       ${months.map((m) => `<tr><td>${month(m.month)}</td><td class="n">${fmt(m.in)}</td><td class="n">${fmt(m.out)}</td><td class="n ${cls(m.net)}">${signed(m.net)}</td></tr>`).join('')}
       <tr class="total"><td>Monthly average</td><td class="n">${fmt(avgIn)}</td><td class="n">${fmt(avgOut)}</td><td class="n ${cls(avgIn - avgOut)}">${signed(avgIn - avgOut)}</td></tr></tbody></table>
-      <p class="note">Checking, savings and credit card accounts tracked here only; transfers between them are left out, loan payments count as money out. Money sent to an account that isn't tracked (for example a share of a joint account used for household bills) counts as money out as one amount; the bills paid from that account aren't seen individually. The first and current months may be partial.</p></section>`);
+      <p class="note">Checking, savings and credit card accounts tracked here only; transfers between them are left out, loan payments count as money out. Money sent from these accounts to one that isn't tracked counts as money out as one amount. Money that never passes through them, such as part of a paycheck deposited straight into a joint account for household bills, isn't seen as income or as spending, and neither are the bills paid from that account. The first and current months may be partial.</p></section>`);
   }
 
   // ----- home -----
