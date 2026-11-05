@@ -91,6 +91,7 @@ function render() {
   renderHoldings();
   renderLoans();
   renderBuckets();
+  renderBudget();
   renderTransactions();
 }
 
@@ -530,9 +531,10 @@ function renderBuckets() {
     const m = em.months;
     head = `<div class="emergency">
       <div><div class="label">Emergency fund</div><div class="big2">${fmt(em.value)}</div></div>
-      <div class="em-months">${m == null ? '<span class="muted">Enter your monthly expenses in Buckets to see how long it would last.</span>'
-        : `Covers <b>${m.toFixed(1)} months</b> of expenses at ${fmt(em.expenses)} a month<span class="muted">${em.source === 'entered' ? ' (the amount you entered)' : ` (your average spending over the last ${em.measured.months} months, from your tracked accounts only: bills paid from an account FinTrack doesn't see aren't in it)`}</span>.
-           <span class="muted">A common guide is 3 to 6 months.</span>`}</div></div>`;
+      <div class="em-months">${m == null ? '<span class="muted">Add your monthly expenses under Income and expenses to see how long it would last.</span>'
+        : em.source === 'list'
+          ? `Covers <b>${m.toFixed(1)} months</b> of essential expenses (${fmt(em.expenses)} a month)${em.monthsAll != null ? `, or ${em.monthsAll.toFixed(1)} months of everything (${fmt(em.allExpenses)})` : ''}. <span class="muted">A common guide is 3 to 6 months of essentials.</span>`
+          : `Covers <b>${m.toFixed(1)} months</b> of expenses at ${fmt(em.expenses)} a month<span class="muted">${em.source === 'entered' ? ' (the amount you entered)' : ` (measured spending in your tracked accounts only)`}</span>. <span class="muted">For a truer figure, list your expenses under Income and expenses.</span>`}</div></div>`;
   }
   $('bucketList').innerHTML = head + list.map((b) => `
     <div class="bucket">
@@ -593,9 +595,7 @@ function openBuckets(a) {
   const list = a.buckets?.length ? a.buckets : [{ name: 'Emergency fund', amount: null, emergency: true }, {}];
   for (const b of list) bucketRow(b);
   const em = list.find((b) => b.emergency);
-  $('bExpenses').value = em?.expenses ?? '';
   const measured = data.emergency?.measured;
-  $('bExpensesHint').textContent = measured ? `Leave this empty to use your measured spending, about ${fmt(measured.amount)} a month. That only counts what leaves your tracked checking, savings and cards: money that never reaches them, such as part of a paycheck deposited straight into a joint account for bills, and the bills paid from there, isn't in it. If that's you, enter your real monthly expenses here.` : '';
   $('bRemoveAll').hidden = !a.buckets?.length;
   updateBucketForm();
   $('bucketsDlg').showModal();
@@ -617,8 +617,94 @@ $('bRemoveAll').addEventListener('click', async () => {
 });
 $('bucketsForm').addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  const buckets = bucketForm().map((b) => ({ ...b, expenses: b.emergency ? $('bExpenses').value : null }));
+  // Keep an amount entered here before the expense list existed.
+  const old = Object.fromEntries((bucketAccount.buckets || []).map((b) => [b.id, b.expenses]));
+  const buckets = bucketForm().map((b) => ({ ...b, expenses: b.emergency ? old[b.id] ?? null : null }));
   try { await saveBuckets(buckets); } catch (err) { $('bError').textContent = err.message; }
+});
+
+// ---------- income and expenses ----------
+
+function renderBudget() {
+  const g = data.budget;
+  const r = g.ratios || {};
+  const lines = g.lines.filter((e) => e.value != null || !e.measured);
+  if (!g.set && !g.salary) {
+    $('budgetBody').innerHTML = `<p class="muted">Add your salary and what you spend each month, including bills paid from accounts FinTrack doesn't track. The emergency fund and the advisor report use them.${g.measured ? ` Your measured spending in tracked accounts is about ${fmt(g.measured.amount)} a month.` : ''}</p>`;
+    return;
+  }
+  const income = g.monthlyIncome ? `<div class="ytd-row">
+      <div>Yearly income<b>${fmt((g.salary || 0) + (g.otherIncome || 0))}</b></div>
+      <div>Monthly, before taxes<b>${fmt(g.monthlyIncome)}</b></div>
+      ${r.debtToIncome != null ? `<div>Loan payments<b>${(r.debtToIncome * 100).toFixed(0)}% of income</b></div>` : ''}
+      ${r.retirementRate != null ? `<div>Into the 401(k)<b>${(r.retirementRate * 100).toFixed(0)}% of salary</b></div>` : ''}
+    </div>` : '';
+  $('budgetBody').innerHTML = `${income}
+    <table class="budget-table"><thead><tr><th>Monthly expense</th><th class="num">Amount</th><th class="center">Essential</th></tr></thead><tbody>
+      ${lines.map((e) => `<tr><td>${esc(e.name)}${e.measured ? `<span class="sub">${e.source === 'measured' ? `Measured average of the last ${g.measured?.months ?? 0} months` : 'Your figure'}</span>` : ''}</td>
+        <td class="num">${e.value == null ? '–' : fmt(e.value)}</td><td class="center">${e.essential ? 'Yes' : ''}</td></tr>`).join('')}
+      <tr class="group"><td>Essentials</td><td class="num">${fmt(g.essential)}</td><td></td></tr>
+      <tr class="group"><td>Everything</td><td class="num">${fmt(g.all)}</td><td></td></tr>
+    </tbody></table>
+    ${r.debtToIncome != null || r.retirementRate != null ? `<p class="small muted">${[
+      r.debtToIncome != null ? `Loan payments are ${fmt(r.loanPayments)} a month (escrow included), against income before taxes.` : '',
+      r.retirementRate != null ? `Into the 401(k) counts your contributions and the employer match, about ${fmt(r.retirementPerYear)} a year.` : '',
+    ].filter(Boolean).join(' ')}</p>` : ''}`;
+}
+
+function budgetRow(e = {}) {
+  const tr = document.createElement('tr');
+  tr.dataset.gid = e.id || '';
+  if (e.measured) tr.dataset.measured = '1';
+  tr.innerHTML = `<td>${e.measured ? `<span>${esc(e.name)}</span>` : `<input class="gn" value="${esc(e.name || '')}" placeholder="Joint account: mortgage, utilities, groceries" aria-label="Expense">`}</td>
+    <td class="num"><input class="ga" type="number" step="0.01" min="0" value="${e.amount ?? ''}" placeholder="${e.measured && data.budget.measured ? `${Math.round(data.budget.measured.amount)} measured` : ''}" aria-label="Per month"></td>
+    <td class="center"><input type="checkbox" class="ge" ${e.essential ? 'checked' : ''} aria-label="Essential"></td>
+    <td>${e.measured ? '' : '<button type="button" class="linkish" data-rm>Remove</button>'}</td>`;
+  $('gRows').appendChild(tr);
+}
+
+function budgetFormValue() {
+  return [...$('gRows').querySelectorAll('tr')].map((tr) => ({
+    id: tr.dataset.gid || undefined,
+    measured: tr.dataset.measured === '1',
+    name: tr.querySelector('.gn')?.value.trim() ?? '',
+    amount: tr.querySelector('.ga').value,
+    essential: tr.querySelector('.ge').checked,
+  }));
+}
+
+function updateBudgetTotals() {
+  let ess = 0, all = 0;
+  for (const e of budgetFormValue()) {
+    const v = e.amount === '' ? (e.measured ? data.budget.measured?.amount || 0 : 0) : Number(e.amount) || 0;
+    all += v; if (e.essential) ess += v;
+  }
+  $('gTotals').innerHTML = `Essentials <b>${fmt(ess)}</b> a month · everything <b>${fmt(all)}</b>`;
+}
+
+$('budgetEdit').addEventListener('click', () => {
+  const g = data.budget;
+  $('gSalary').value = g.salary ?? '';
+  $('gOther').value = g.otherIncome ?? '';
+  $('gRows').innerHTML = '';
+  for (const e of g.lines) budgetRow(e);
+  if (g.lines.length < 2) budgetRow();
+  $('gError').textContent = '';
+  updateBudgetTotals();
+  $('budgetDlg').showModal();
+});
+$('gAdd').addEventListener('click', () => { budgetRow(); updateBudgetTotals(); });
+$('gRows').addEventListener('click', (ev) => { if (ev.target.closest('[data-rm]')) { ev.target.closest('tr').remove(); updateBudgetTotals(); } });
+$('budgetForm').addEventListener('input', updateBudgetTotals);
+$('budgetForm').addEventListener('change', updateBudgetTotals);
+$('gCancel').addEventListener('click', () => $('budgetDlg').close());
+$('budgetForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  try {
+    await api('/api/budget', { method: 'PUT', body: JSON.stringify({ budget: { salary: $('gSalary').value, otherIncome: $('gOther').value, expenses: budgetFormValue() } }) });
+    $('budgetDlg').close();
+    await load();
+  } catch (err) { $('gError').textContent = err.message; }
 });
 
 // ---------- loans: payoff, interest vs principal, extra payments ----------

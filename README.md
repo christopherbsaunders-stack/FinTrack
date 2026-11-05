@@ -45,7 +45,9 @@ The account shows what's estimated ("Estimated since Nov 5: 1 paycheck ($1,715.8
 
 **Gains on stocks.** Brokerages send shares and market value (the price shown is value ÷ shares). Robinhood doesn't send what you paid, so its holdings show **Add cost**: enter your average cost per share (in Robinhood: open the stock, "Your average cost") and the Gain column shows the gain and percent from then on, using your current shares. Click the gain to change it when you buy more and the average changes. A cost your brokerage does send always wins.
 
-**Savings buckets.** One bank account often holds several pots of money. Click **Split into buckets** on the account: give each bucket an amount set aside (and an optional goal), and pick one bucket to hold the rest of the balance, where deposits and interest land. When you move money between buckets, change their amounts. Mark one bucket as the emergency fund and enter the monthly expenses it should cover: the **Savings buckets** card shows how many months it would last (FinTrack's own measure of your spending is used if you leave that empty, but it only sees the accounts you track). Buckets don't change net worth; they show what the money is for.
+**Savings buckets.** One bank account often holds several pots of money. Click **Split into buckets** on the account: give each bucket an amount set aside (and an optional goal), and pick one bucket to hold the rest of the balance, where deposits and interest land. When you move money between buckets, change their amounts. Mark one bucket as the emergency fund: the **Savings buckets** card shows how many months it would last, measured against the essential expenses under Income and expenses. Buckets don't change net worth; they show what the money is for.
+
+**Income and expenses.** FinTrack only sees money that reaches your tracked accounts, so part of a paycheck sent straight to a joint account, and the bills paid from there, are invisible to it. Under **Income and expenses**, enter your yearly salary (and other household income if you like) and a list of monthly expenses, ticking the essential ones (what would still have to be paid if your income stopped). The first line is your spending in the tracked accounts: measured, or your own figure. The emergency fund shows months of essentials and months of everything; the card and the report show loan payments as a share of income and 401(k) contributions as a share of salary.
 
 **Advisor report.** **Advisor report** (top right) opens a printable summary: net worth and its trend, a balance sheet of every account (with buckets), the 401(k) funds with today's and future allocation, brokerage holdings with gains, savings goals and emergency fund months, each loan (rate, payments, payoff, extra payments), monthly cash flow, your notes and questions, and what's estimated and where each number comes from. Type whose report it is and your notes at the top (they're saved), then **Print or save as PDF**. Spreadsheet (CSV) downloads of accounts, holdings, loans, cash flow and net worth history are linked there too.
 
@@ -90,6 +92,7 @@ src/sync.js        merge a fetch into the state; record today's value of every a
 src/classify.js    categories (asset or debt) and the guess from an account's name
 src/summary.js     totals, history, cash flow, holdings for the dashboard (pure, tested)
 src/buckets.js     splitting an account into buckets; emergency fund months
+src/budget.js      income, the monthly expense list, essentials, and ratios
 src/export.js      spreadsheet (CSV) exports
 src/loans.js       loan math: payoff, interest vs principal, extra payments (also loaded by the dashboard)
 src/hpi.js         home values that follow a house price index (FRED)

@@ -71,6 +71,14 @@
       <div id="bucketList"></div>
     </section>
 
+    <section class="card" id="budgetCard">
+      <div class="card-head">
+        <h2>Income and expenses</h2>
+        <button type="button" class="ghost" id="budgetEdit">Edit</button>
+      </div>
+      <div id="budgetBody"></div>
+    </section>
+
     <div id="loans"></div>
 
     <section class="card">
@@ -143,15 +151,40 @@
       </div>
       <button type="button" class="linkish" id="bAdd">+ Add bucket</button>
       <p class="small" id="bSummary"></p>
-      <div class="form-grid" id="bExpensesWrap" hidden>
-        <label>Monthly expenses the emergency fund should cover ($) <input id="bExpenses" inputmode="decimal" placeholder="e.g. 6000"></label>
-      </div>
-      <p class="muted small" id="bExpensesHint"></p>
+      <p class="muted small" id="bExpensesWrap" hidden>How long the emergency fund lasts is worked out from your monthly expenses under <b>Income and expenses</b> on the dashboard.</p>
       <div id="bError" class="form-error" role="alert"></div>
       <div class="row">
         <button type="submit">Save</button>
         <button type="button" class="ghost" id="bCancel">Cancel</button>
         <button type="button" class="danger" id="bRemoveAll" hidden>Remove buckets</button>
+      </div>
+    </form>
+  </dialog>
+
+ <dialog id="budgetDlg" class="wide">
+    <form id="budgetForm">
+      <h2>Income and expenses</h2>
+      <p class="muted small">FinTrack only sees money that reaches your tracked accounts. Part of a paycheck sent straight to a joint account, and the bills paid from there, never do, so enter them here.</p>
+      <div class="form-grid">
+        <label>Your yearly salary, before taxes ($) <input id="gSalary" inputmode="decimal" placeholder="e.g. 120000"></label>
+        <label>Other yearly household income ($) <input id="gOther" inputmode="decimal" placeholder="Optional, e.g. a spouse's salary"></label>
+      </div>
+      <fieldset>
+        <legend>Monthly expenses</legend>
+        <p class="muted small">Tick the ones that would still have to be paid if your income stopped: the emergency fund is measured against those. The first line is your spending in the accounts FinTrack tracks; leave its amount empty to use the measured average, or enter what you'd count instead.</p>
+        <div class="table-wrap">
+          <table class="fund-rows bucket-form">
+            <thead><tr><th>Expense</th><th class="num">Per month</th><th class="center">Essential</th><th></th></tr></thead>
+            <tbody id="gRows"></tbody>
+          </table>
+        </div>
+        <button type="button" class="linkish" id="gAdd">+ Add expense</button>
+        <p class="small" id="gTotals"></p>
+      </fieldset>
+      <div id="gError" class="form-error" role="alert"></div>
+      <div class="row">
+        <button type="submit">Save</button>
+        <button type="button" class="ghost" id="gCancel">Cancel</button>
       </div>
     </form>
   </dialog>

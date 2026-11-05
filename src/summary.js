@@ -5,6 +5,7 @@ import { dayKey } from './store.js';
 import { loanSummary } from './loans.js';
 import { lacksName } from './prices.js';
 import { splitBuckets, averageSpending, monthsCovered } from './buckets.js';
+import { computeBudget, ratios } from './budget.js';
 
 const DAY = 86400000;
 const FLOW_CATEGORIES = new Set(['cash', 'creditCard']);
@@ -56,16 +57,28 @@ export function computeSummary(state, now = new Date()) {
   const em = allBuckets.find((b) => b.emergency);
   const thisMonth = dayKey(now).slice(0, 7);
   const measured = averageSpending(flows.months, thisMonth);
+  const budget = computeBudget(state.settings?.budget, measured);
+  // What the emergency fund has to cover: the essential lines of the expense
+  // list once there is one; before that, the amount entered on the fund (the
+  // older way), else measured spending.
+  let expenses, allExpenses = null, source;
+  if (budget.set && budget.essential > 0) { expenses = budget.essential; allExpenses = budget.all; source = 'list'; }
+  else if (em?.expenses) { expenses = em.expenses; source = 'entered'; }
+  else { expenses = measured?.amount ?? null; source = measured ? 'measured' : null; }
   const emergency = em ? {
     name: em.name, account: em.account, value: em.value, goal: em.goal,
-    expenses: em.expenses || measured?.amount || null,
-    source: em.expenses ? 'entered' : measured ? 'measured' : null,
-    measured,
-    months: monthsCovered(em.value, em.expenses || measured?.amount),
+    expenses, allExpenses, source, measured,
+    months: monthsCovered(em.value, expenses),
+    monthsAll: allExpenses > expenses ? monthsCovered(em.value, allExpenses) : null,
   } : null;
   const loans = visible.filter((a) => a.kind === 'liability' && a.loan)
     .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category) || Math.abs(b.value) - Math.abs(a.value))
     .map((a) => loanFor(state, a, now));
+  // Yearly 401(k) money in (yours and the match) from the contribution plans.
+  const PER_YEAR = { month: 12, '2weeks': 26, week: 52 };
+  const plans = visible.filter((a) => a.source === 'priced' && a.priced?.plan?.enabled);
+  const retirementPerYear = plans.length ? Math.round(plans.reduce((s, a) => s + a.priced.plan.amount * (PER_YEAR[a.priced.plan.schedule?.every] || 12), 0) * 100) / 100 : null;
+  budget.ratios = ratios(budget, { loanPayments: loans.reduce((s, l) => s + l.payment, 0), retirementPerYear });
 
   return {
     generatedAt: now.toISOString(),
@@ -99,6 +112,7 @@ export function computeSummary(state, now = new Date()) {
     loans,
     buckets: allBuckets,
     emergency,
+    budget,
     categories: CATEGORY_ORDER.map((id) => ({ id, ...CATEGORIES[id] })),
   };
 }

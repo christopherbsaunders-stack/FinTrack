@@ -226,3 +226,6 @@ td.center, th.center { text-align: center; }
 .gain-edit .up, .gain-edit .down { color: inherit; }
 a.btn-link { font-weight: 600; font-size: 13px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); text-decoration: none; }
 a.btn-link:hover { border-color: var(--muted); }
+.budget-table { margin-top: 12px; }
+.budget-table td.center, .budget-table th.center { width: 90px; }
+#budgetBody .ytd-row { margin-bottom: 6px; }

@@ -19,6 +19,7 @@ import { computeSummary } from './summary.js';
 import { CATEGORIES, kindOf } from './classify.js';
 import { validateLoan } from './loans.js';
 import { validateBuckets } from './buckets.js';
+import { validateBudget } from './budget.js';
 import { exportCsv, EXPORTS } from './export.js';
 import { demoState } from './demo.js';
 
@@ -238,6 +239,14 @@ const routes = [
     else a.index = await anchorTo(String(series).trim().toUpperCase(), a.balance);
     pruneIndexes();
     revaluePriced(state);
+    persist();
+    return { ok: true };
+  }],
+
+  // Income and the monthly expense list.
+  ['PUT', /^\/api\/budget$/, async (req) => {
+    const { budget } = await readJson(req);
+    try { state.settings.budget = validateBudget(budget || {}); } catch (err) { throw httpError(400, err.message); }
     persist();
     return { ok: true };
   }],

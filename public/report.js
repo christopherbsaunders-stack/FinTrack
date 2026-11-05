@@ -67,7 +67,9 @@ function render() {
     ['Invested', fmt(t.invested), `${fmt(t.retirement)} in retirement accounts`],
   ];
   if (t.homeEquity != null) figs.push(['Home equity', fmt(t.homeEquity), 'Home value minus mortgage']);
-  if (data.emergency?.months != null) figs.push(['Emergency fund', `${data.emergency.months.toFixed(1)} months`, `${fmt(data.emergency.value)} set aside`]);
+  const g = data.budget || {};
+  if (g.monthlyIncome) figs.push(['Income before taxes', `${fmt(g.monthlyIncome)}/mo`, g.ratios?.debtToIncome != null ? `Loan payments ${pct(g.ratios.debtToIncome, 0)} of it` : `${fmt(g.monthlyIncome * 12)} a year`]);
+  if (data.emergency?.months != null) figs.push(['Emergency fund', `${data.emergency.months.toFixed(1)} months`, `${fmt(data.emergency.value)} set aside${data.emergency.source === 'list' ? ', essentials' : ''}`]);
   const monthlyDebt = data.loans.reduce((s, l) => s + l.payment, 0);
   if (monthlyDebt) figs.push(['Loan payments', `${fmt(monthlyDebt)}/mo`, `${data.loans.length} loan${data.loans.length > 1 ? 's' : ''}, escrow included`]);
   parts.push(`<section><h2>At a glance</h2><div class="figures">${figs.map(([l, v, s, main]) => `<div class="fig${main ? ' main' : ''}"><div class="l">${l}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`).join('')}</div></section>`);
@@ -130,10 +132,29 @@ function render() {
   if (data.buckets.length) {
     const em = data.emergency;
     parts.push(`<section><h2>Cash and savings goals</h2>
-      ${em ? `<p>Emergency fund: <b>${fmt(em.value)}</b>${em.months != null ? `, about <b>${em.months.toFixed(1)} months</b> of expenses at ${fmt(em.expenses)} a month (${em.source === 'entered' ? 'monthly expenses as given by the owner' : 'average spending measured from the tracked accounts'})` : ''}.</p>` : ''}
+      ${em ? `<p>Emergency fund: <b>${fmt(em.value)}</b>${em.months == null ? '' : em.source === 'list'
+        ? `, about <b>${em.months.toFixed(1)} months</b> of essential expenses (${fmt(em.expenses)} a month)${em.monthsAll != null ? ` or ${em.monthsAll.toFixed(1)} months of all expenses (${fmt(em.allExpenses)} a month); see Income and expenses` : ''}`
+        : `, about <b>${em.months.toFixed(1)} months</b> of expenses at ${fmt(em.expenses)} a month (${em.source === 'entered' ? 'monthly expenses as given by the owner' : 'average spending measured from the tracked accounts only'})`}.</p>` : ''}
       <table><thead><tr><th>Bucket</th><th>Account</th><th class="n">Amount</th><th class="n">Goal</th><th class="n">Progress</th></tr></thead><tbody>
       ${data.buckets.map((b) => `<tr><td>${esc(bucketName(b))}</td><td>${esc(b.account)}</td><td class="n">${fmt(b.value)}</td><td class="n">${b.goal ? fmt(b.goal) : '–'}</td><td class="n">${b.goal ? pct(b.progress, 0) : '–'}</td></tr>`).join('')}
       </tbody></table></section>`);
+  }
+
+  // ----- income and expenses -----
+  if (g.set || g.salary) {
+    const r = g.ratios || {};
+    const lines = (g.lines || []).filter((e) => e.value != null);
+    parts.push(`<section><h2>Income and expenses</h2>
+      ${g.monthlyIncome ? `<div class="loan-grid" style="margin-bottom:8px">
+        ${kv('Salary, before taxes', `${fmt(g.salary)} a year`)}${g.otherIncome ? kv('Other household income', `${fmt(g.otherIncome)} a year`) : ''}${kv('Monthly income, before taxes', fmt(g.monthlyIncome))}
+        ${r.debtToIncome != null ? kv('Loan payments to income', `${pct(r.debtToIncome, 0)} (${fmt(r.loanPayments)} a month, escrow included)`) : ''}
+        ${r.retirementRate != null ? kv('401(k) contributions', `${pct(r.retirementRate, 0)} of salary (${fmt(r.retirementPerYear)} a year with the employer match)`) : ''}
+      </div>` : ''}
+      ${lines.length ? `<table><thead><tr><th>Monthly expense</th><th class="n">Amount</th><th class="n">Essential</th></tr></thead><tbody>
+        ${lines.map((e) => `<tr><td>${esc(e.name)}${e.measured ? ` <span class="muted small">(${e.source === 'measured' ? `measured average, last ${g.measured?.months ?? 0} months` : "owner's figure"})</span>` : ''}</td><td class="n">${fmt(e.value)}</td><td class="n">${e.essential ? 'Yes' : ''}</td></tr>`).join('')}
+        <tr class="total"><td>Essential expenses</td><td class="n">${fmt(g.essential)}</td><td></td></tr>
+        <tr><td><b>All expenses</b></td><td class="n"><b>${fmt(g.all)}</b></td><td></td></tr></tbody></table>` : ''}
+      <p class="note">Income and the expenses outside the tracked accounts are the owner's figures. "Essential" means it would still have to be paid if income stopped; the emergency fund is measured against those.</p></section>`);
   }
 
   // ----- debts -----
