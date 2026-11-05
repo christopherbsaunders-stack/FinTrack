@@ -68,6 +68,14 @@
 
     <div id="growth"></div>
 
+    <section class="card" id="mixCard" hidden>
+      <div class="card-head">
+        <h2>Investment mix</h2>
+        <button type="button" class="ghost" id="mixTargetBtn">Set a target mix</button>
+      </div>
+      <div id="mixBody"></div>
+    </section>
+
     <section class="card" id="bucketsCard" hidden>
       <h2>Savings buckets</h2>
       <div id="bucketList"></div>
@@ -187,6 +195,26 @@
       <div class="row">
         <button type="submit">Save</button>
         <button type="button" class="ghost" id="gCancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+ <dialog id="mixDlg">
+    <form id="mixForm">
+      <h2 id="mixTitle">Split</h2>
+      <p class="muted small" id="mixHelp"></p>
+      <div class="form-grid">
+        <label>US stocks (%) <input id="mUs" type="number" min="0" max="100" step="0.1"></label>
+        <label>International stocks (%) <input id="mIntl" type="number" min="0" max="100" step="0.1"></label>
+        <label>Bonds (%) <input id="mBonds" type="number" min="0" max="100" step="0.1"></label>
+        <label>Cash (%) <input id="mCash" type="number" min="0" max="100" step="0.1"></label>
+      </div>
+      <p class="small" id="mSum"></p>
+      <div id="mError" class="form-error" role="alert"></div>
+      <div class="row">
+        <button type="submit">Save</button>
+        <button type="button" class="ghost" id="mCancel">Cancel</button>
+        <button type="button" class="danger" id="mClear" hidden>Clear</button>
       </div>
     </form>
   </dialog>

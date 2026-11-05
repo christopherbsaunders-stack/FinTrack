@@ -6,6 +6,7 @@ import { loanSummary } from './loans.js';
 import { lacksName } from './prices.js';
 import { splitBuckets, averageSpending, monthsCovered } from './buckets.js';
 import { computeBudget, ratios } from './budget.js';
+import { computeMix } from './mix.js';
 
 const DAY = 86400000;
 const FLOW_CATEGORIES = new Set(['cash', 'creditCard']);
@@ -113,6 +114,7 @@ export function computeSummary(state, now = new Date()) {
     buckets: allBuckets,
     emergency,
     budget,
+    mix: computeMix(visible, state.assetClasses || {}, state.settings?.targetMix || null),
     categories: CATEGORY_ORDER.map((id) => ({ id, ...CATEGORIES[id] })),
   };
 }

@@ -91,6 +91,7 @@ function render() {
   renderHoldings();
   renderLoans();
   renderGrowth();
+  renderMix();
   renderBuckets();
   renderBudget();
   renderTransactions();
@@ -597,6 +598,94 @@ function twoLineChart(el, pts) {
   hit.addEventListener('pointerdown', move);
   hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
 }
+
+// ---------- investment mix ----------
+
+const MIX = [['usStocks', 'US stocks', 'var(--s1)'], ['intlStocks', 'International stocks', 'var(--s2)'], ['bonds', 'Bonds', 'var(--s3)'], ['cash', 'Cash', 'var(--s4)'], ['unclassified', 'Not sorted yet', 'var(--muted)']];
+const mixColor = (k) => MIX.find((m) => m[0] === k)?.[2];
+const pctTxt = (x) => `${(x * 100).toFixed(x < 0.1 && x > 0 ? 1 : 0)}%`;
+
+function renderMix() {
+  const m = data.mix;
+  $('mixCard').hidden = !m || !m.total;
+  if (!m?.total) return;
+  const parts = m.parts.filter((p) => p.value > 0.5);
+  const bar = (list, cls) => `<div class="mix-bar ${cls || ''}" role="img" aria-label="${list.map((p) => `${p.label} ${pctTxt(p.pct)}`).join(', ')}">${list.filter((p) => p.pct > 0).map((p) => `<span style="flex:${p.pct} 1 0;background:${mixColor(p.key)}" title="${esc(p.label)}: ${pctTxt(p.pct)}"></span>`).join('')}</div>`;
+  let html = `<div class="ytd-row"><div>Invested<b>${fmt(m.total)}</b></div><div>In stocks<b>${pctTxt(m.stocks)}</b></div></div>`;
+  html += bar(parts);
+  if (m.vsTarget) html += `<div class="mix-target-label">Target</div>` + bar(m.vsTarget.map((t) => ({ key: t.key, label: t.label, pct: t.want })), 'target');
+  html += `<div class="mix-legend">${parts.map((p) => `<span><i style="background:${mixColor(p.key)}"></i>${esc(p.label)}<b>${pctTxt(p.pct)}</b> <span class="muted">${fmt(p.value)}</span></span>`).join('')}</div>`;
+  if (m.vsTarget) {
+    const off = m.vsTarget.filter((t) => Math.abs(t.diff) >= 0.01);
+    html += off.length ? `<ul class="mix-gaps">${off.map((t) => `<li>${esc(t.label)}: ${pctTxt(t.have)}, target ${pctTxt(t.want)}, <b>${t.diff > 0 ? `${fmt(t.dollars)} over` : `${fmt(-t.dollars)} under`}</b></li>`).join('')}</ul>`
+      : '<p class="small up">Within 1% of your target everywhere.</p>';
+  }
+  html += `<details class="sched"${mixOpen ? ' open' : ''}><summary>What's in each${m.guessed ? ` (${m.guessed} guessed from fund names: check them)` : ''}</summary>
+    <div class="table-wrap"><table class="mix-table"><thead><tr><th>Holding</th><th>Account</th><th class="num">Value</th><th>Kind</th></tr></thead><tbody>
+    ${m.items.map((it) => `<tr data-key="${esc(it.key)}"><td>${it.symbol ? `<b>${esc(it.symbol)}</b> ` : ''}${esc(it.name || '')}</td><td class="small muted">${esc(it.accounts.join(', '))}</td><td class="num">${fmt(it.value)}</td>
+      <td>${it.key.startsWith('cash:') ? 'Cash' : `<select data-mix aria-label="Kind of investment">${kindOptions(it.split)}</select>${it.guessed ? '<span class="guess">guess</span>' : ''}`}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${m.guessed ? `<p class="small"><button type="button" class="linkish" id="mixAccept">Accept the ${m.guessed} guesses</button> <span class="muted">once you've checked them; change any that's wrong first.</span></p>` : ''}</details>`;
+  $('mixBody').innerHTML = html;
+  $('mixAccept')?.addEventListener('click', () => act(async () => {
+    for (const it of data.mix.items.filter((i) => i.guessed)) await api('/api/mix/class', { method: 'PUT', body: JSON.stringify({ key: it.key, split: Object.fromEntries(Object.entries(it.split).map(([k, v]) => [k, v * 100])) }) });
+  }));
+  $('mixTargetBtn').textContent = m.vsTarget ? 'Target mix' : 'Set a target mix';
+  $('mixBody').querySelector('details').addEventListener('toggle', (ev) => { mixOpen = ev.target.open; });
+}
+let mixOpen = false;
+const SHORT = { usStocks: 'US', intlStocks: 'international', bonds: 'bonds', cash: 'cash' };
+
+function kindOptions(split) {
+  const single = split && Object.entries(split).find(([, v]) => v === 1)?.[0];
+  const sel = !split ? '' : single || 'mixed';
+  const opts = [['', 'Not sorted yet'], ['usStocks', 'US stocks'], ['intlStocks', 'International stocks'], ['bonds', 'Bonds'], ['cash', 'Cash'], ['mixed', sel === 'mixed' ? `A blend (${MIX.slice(0, 4).filter(([k]) => split[k] > 0).map(([k]) => `${Math.round(split[k] * 100)}% ${SHORT[k]}`).join(', ')})` : 'A blend…']];
+  return opts.map(([v, l]) => `<option value="${v}"${v === sel ? ' selected' : ''}>${esc(l)}</option>`).join('');
+}
+
+let mixEditing = null;   // { key, name } for a holding's blend, or 'target'
+function openMix(kind, split) {
+  mixEditing = kind;
+  const isTarget = kind === 'target';
+  $('mixTitle').textContent = isTarget ? 'Target mix' : `${kind.name}: a blend`;
+  $('mixHelp').textContent = isTarget
+    ? 'The mix you\'re aiming for across your investment and retirement accounts. Your advisor can help pick it; a common rule of thumb holds less in stocks the closer you are to needing the money.'
+    : 'For a fund that holds more than one kind, like a target-date or balanced fund. Its fact sheet lists the split.';
+  const v = (k) => (split?.[k] != null ? Math.round(split[k] * (isTarget ? 1 : 100) * 10) / 10 : '');
+  $('mUs').value = v('usStocks'); $('mIntl').value = v('intlStocks'); $('mBonds').value = v('bonds'); $('mCash').value = v('cash');
+  $('mClear').hidden = !isTarget || !data.mix.vsTarget;
+  $('mError').textContent = '';
+  mixSum();
+  $('mixDlg').showModal();
+}
+function mixValues() { return { usStocks: $('mUs').value, intlStocks: $('mIntl').value, bonds: $('mBonds').value, cash: $('mCash').value }; }
+function mixSum() {
+  const t = Object.values(mixValues()).reduce((s, v) => s + (Number(v) || 0), 0);
+  $('mSum').innerHTML = `Adds up to <b class="${Math.abs(t - 100) > 0.5 ? 'down' : ''}">${Math.round(t * 10) / 10}%</b>`;
+}
+$('mixForm').addEventListener('input', mixSum);
+$('mCancel').addEventListener('click', () => { $('mixDlg').close(); renderMix(); });
+$('mClear').addEventListener('click', async () => {
+  try { await api('/api/mix/target', { method: 'PUT', body: JSON.stringify({ target: null }) }); $('mixDlg').close(); await load(); } catch (err) { $('mError').textContent = err.message; }
+});
+$('mixForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  try {
+    if (mixEditing === 'target') await api('/api/mix/target', { method: 'PUT', body: JSON.stringify({ target: mixValues() }) });
+    else await api('/api/mix/class', { method: 'PUT', body: JSON.stringify({ key: mixEditing.key, split: mixValues() }) });
+    $('mixDlg').close();
+    await load();
+  } catch (err) { $('mError').textContent = err.message; }
+});
+$('mixTargetBtn').addEventListener('click', () => openMix('target', data.settingsTargetMix || (data.mix.vsTarget && Object.fromEntries(data.mix.vsTarget.map((t) => [t.key, t.want * 100])))));
+$('mixBody').addEventListener('change', (ev) => {
+  const sel = ev.target.closest('select[data-mix]');
+  if (!sel) return;
+  const key = sel.closest('tr').dataset.key;
+  const it = data.mix.items.find((i) => i.key === key);
+  if (sel.value === 'mixed') { openMix({ key, name: it.symbol || it.name }, it.split); return; }
+  act(() => api('/api/mix/class', { method: 'PUT', body: JSON.stringify({ key, split: sel.value || null }) }));
+});
 
 // ---------- buckets: one account split into named parts ----------
 

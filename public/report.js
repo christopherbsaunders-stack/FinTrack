@@ -126,7 +126,20 @@ function render() {
       </tbody></table>`;
       if (others.some((h) => h.costSource === 'entered')) caveats.push('Brokerage gains: the cost basis for some holdings is an average cost per share entered by hand (the brokerage doesn\'t report it).');
     }
-    html += `<p class="note">All holdings together: ${fmt(invested)}.</p></section>`;
+    html += `<p class="note">All holdings together: ${fmt(invested)}.</p>`;
+    // Investment mix: stocks, bonds and cash across investment and retirement accounts.
+    const m = data.mix;
+    if (m?.total) {
+      const COL = { usStocks: '#2a78d6', intlStocks: '#eb6834', bonds: '#1baf7a', cash: '#eda100', unclassified: '#9b9993' };
+      const parts = m.parts.filter((p) => p.value > 0.5);
+      html += `<h3>Investment mix</h3>
+        <div style="display:flex;gap:2px;height:16px;margin:6px 0">${parts.map((p) => `<span style="flex:${p.pct} 1 0;background:${COL[p.key]};-webkit-print-color-adjust:exact;print-color-adjust:exact"></span>`).join('')}</div>
+        <table><thead><tr><th>Kind</th><th class="n">Amount</th><th class="n">Share</th>${m.vsTarget ? '<th class="n">Target</th><th class="n">Difference</th>' : ''}</tr></thead><tbody>
+        ${parts.map((p) => { const t = m.vsTarget?.find((x) => x.key === p.key); return `<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${COL[p.key]};-webkit-print-color-adjust:exact;print-color-adjust:exact"></span>${esc(p.label)}</td><td class="n">${fmt(p.value)}</td><td class="n">${pct(p.pct, 0)}</td>${m.vsTarget ? `<td class="n">${t ? pct(t.want, 0) : '–'}</td><td class="n">${t ? `${signed(t.dollars)}` : ''}</td>` : ''}</tr>`; }).join('')}
+        </tbody></table>
+        <p class="note">${pct(m.stocks, 0)} in stocks across investment and retirement accounts.${m.guessed ? ` ${m.guessed} holding${m.guessed > 1 ? 's are' : ' is'} sorted by a guess from the fund's name.` : ''}${parts.some((p) => p.key === 'unclassified') ? ' Some holdings aren\'t sorted yet.' : ''}</p>`;
+    }
+    html += '</section>';
     parts.push(html);
   }
 

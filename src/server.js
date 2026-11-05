@@ -20,6 +20,7 @@ import { CATEGORIES, kindOf } from './classify.js';
 import { validateLoan } from './loans.js';
 import { validateBuckets } from './buckets.js';
 import { validateBudget } from './budget.js';
+import { validateSplit, validateTarget } from './mix.js';
 import { exportCsv, EXPORTS } from './export.js';
 import { demoState } from './demo.js';
 
@@ -244,6 +245,27 @@ const routes = [
     else a.index = await anchorTo(String(series).trim().toUpperCase(), a.balance);
     pruneIndexes();
     revaluePriced(state);
+    persist();
+    return { ok: true };
+  }],
+
+  // What kind of investment a holding (or a whole account) is; null goes back to the guess.
+  ['PUT', /^\/api\/mix\/class$/, async (req) => {
+    const { key, split } = await readJson(req);
+    if (!/^(acct:[\w-]+|name:.{1,120}|[A-Z0-9.^-]{1,12})$/.test(String(key || ''))) throw httpError(400, 'Unknown holding.');
+    state.assetClasses ||= {};
+    try {
+      const v = validateSplit(split);
+      if (v) state.assetClasses[key] = v; else delete state.assetClasses[key];
+    } catch (err) { throw httpError(400, err.message); }
+    persist();
+    return { ok: true };
+  }],
+
+  // The mix you're aiming for, in percents; null or all zero clears it.
+  ['PUT', /^\/api\/mix\/target$/, async (req) => {
+    const { target } = await readJson(req);
+    try { state.settings.targetMix = validateTarget(target); } catch (err) { throw httpError(400, err.message); }
     persist();
     return { ok: true };
   }],

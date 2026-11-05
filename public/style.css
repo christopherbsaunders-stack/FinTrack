@@ -11,6 +11,7 @@
   --s1: #2a78d6;   /* assets, money in, net worth */
   --s2: #eb6834;   /* debts, money out */
   --s3: #1baf7a;
+  --s4: #eda100;
   --good: #006300;
   --bad: #b42323;
   --critical: #d03b3b;
@@ -33,6 +34,7 @@
     --s1: #3987e5;
     --s2: #d95926;
     --s3: #199e70;
+    --s4: #c98500;
     --good: #4fc24f;
     --bad: #f07070;
     --warning-bg: #3a2f10;
@@ -43,7 +45,7 @@
   color-scheme: dark;
   --bg: #121211; --surface: #1a1a19; --border: #2d2d2a; --grid: #262624;
   --text: #f0efec; --text-2: #c3c2b7; --muted: #93918a; --accent: #3987e5;
-  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --good: #4fc24f; --bad: #f07070;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --good: #4fc24f; --bad: #f07070;
   --warning-bg: #3a2f10; --warning-border: #a57c00;
 }
 
@@ -231,3 +233,17 @@ a.btn-link:hover { border-color: var(--muted); }
 #budgetBody .ytd-row { margin-bottom: 6px; }
 .legend i.dash { background: none; border-top: 2px dashed var(--muted); height: 0; }
 .growth-sum .ytd-row { margin-bottom: 4px; }
+
+.mix-bar { display: flex; gap: 2px; height: 22px; margin: 12px 0 6px; }
+.mix-bar span { display: block; height: 100%; min-width: 2px; }
+.mix-bar span:first-child { border-radius: 4px 0 0 4px; }
+.mix-bar span:last-child { border-radius: 0 4px 4px 0; }
+.mix-bar.target { height: 8px; margin-top: 2px; opacity: 0.55; }
+.mix-legend { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 13px; }
+.mix-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.mix-legend b { margin-left: 4px; }
+.mix-target-label { font-size: 11px; color: var(--muted); }
+.mix-gaps { margin-top: 10px; font-size: 13px; }
+.mix-gaps li { margin: 2px 0; }
+.mix-table select { font-size: 12px; padding: 3px 6px; }
+.guess { font-size: 11px; color: var(--muted); margin-left: 6px; }
