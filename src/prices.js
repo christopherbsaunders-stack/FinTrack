@@ -100,3 +100,24 @@ export function closeOnOrAfter(p, date) {
 
 export function daysBetween(a, b) { return Math.round((Date.parse(b) - Date.parse(a)) / DAY); }
 function round(n, d) { const f = 10 ** d; return Math.round(n * f) / f; }
+
+// A holding with no real name: empty, or SimpleFIN's filler "0.146 shares of AMD".
+export function lacksName(description) {
+  return !description || /^[\d.,]+ shares? of /i.test(description);
+}
+
+// Look up company names for holdings that came without one, once each.
+// A symbol Yahoo doesn't know is tried again after a week.
+export async function fillNames(state, symbols, { now = new Date(), fetchImpl } = {}) {
+  state.names ||= {};
+  state.nameMisses ||= {};
+  for (const sym of symbols) {
+    if (state.names[sym]) continue;
+    const missed = state.nameMisses[sym];
+    if (missed && now - new Date(missed) < 7 * 86400000) continue;
+    try {
+      const h = await fetchHistory(sym, { range: '5d' }, fetchImpl);
+      if (h.name) { state.names[sym] = h.name; delete state.nameMisses[sym]; } else state.nameMisses[sym] = now.toISOString();
+    } catch { state.nameMisses[sym] = now.toISOString(); }
+  }
+}

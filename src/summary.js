@@ -3,6 +3,7 @@
 import { CATEGORIES, CATEGORY_ORDER, kindOf, signedValue } from './classify.js';
 import { dayKey } from './store.js';
 import { loanSummary } from './loans.js';
+import { lacksName } from './prices.js';
 import { splitBuckets, averageSpending, monthsCovered } from './buckets.js';
 
 const DAY = 86400000;
@@ -93,7 +94,7 @@ export function computeSummary(state, now = new Date()) {
     history,
     cashFlow: flows.months,
     transactions: flows.recent,
-    holdings: topHoldings(visible, state.costs || {}),
+    holdings: topHoldings(visible, state.costs || {}, state.names || {}),
     loans,
     buckets: allBuckets,
     emergency,
@@ -223,14 +224,14 @@ export function findTransfers(txs) {
 
 // Holdings across accounts, by symbol. Where the brokerage doesn't send what
 // you paid, the average cost per share you entered (`costs`) fills it in.
-function topHoldings(accounts, costs = {}) {
+function topHoldings(accounts, costs = {}, names = {}) {
   const map = new Map();
   for (const a of accounts) {
     for (const h of a.holdings || []) {
       const key = h.symbol || h.description;
       if (!key) continue;
-      // SimpleFIN fills a missing name with "0.146 shares of AMD"; that says nothing the columns don't.
-      const description = /^[\d.,]+ shares? of /i.test(h.description || '') ? '' : h.description;
+      // SimpleFIN fills a missing name with "0.146 shares of AMD"; use the name looked up instead.
+      const description = lacksName(h.description) ? names[h.symbol] || '' : h.description;
       const cur = map.get(key) || { symbol: h.symbol, description, value: 0, costBasis: 0, hasBasis: true, shares: 0, price: null, taxable: false, costSource: null };
       if (a.category === 'investments') cur.taxable = true;
       if (!cur.description && description) cur.description = description;

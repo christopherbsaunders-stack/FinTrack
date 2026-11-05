@@ -177,3 +177,23 @@ test('an average cost you enter gives a gain where the brokerage sent none', () 
   assert.equal(by.VOO.gain, 39, "the brokerage's own cost wins over one entered");
   assert.equal(by.VOO.costSource, 'brokerage');
 });
+
+test('a holding without a name gets one looked up, once', async () => {
+  const s = emptyState();
+  const rh = acct('rh', 'Individual', 'Robinhood', 61);
+  rh.holdings = [{ symbol: 'AMD', description: '0.146 shares of AMD', shares: 0.146, value: 61, costBasis: null }, { symbol: 'HAS', description: 'Hasbro Inc', shares: 2, value: 240, costBasis: null }];
+  applyAccountSet(s, { accounts: [rh] }, now);
+  const urls = [];
+  const fake = async (url) => {
+    urls.push(url);
+    return Response.json({ chart: { error: null, result: [{ meta: { symbol: 'AMD', longName: 'Advanced Micro Devices, Inc.', gmtoffset: -18000 }, timestamp: [], indicators: { quote: [{ close: [] }] } }] } });
+  };
+  const { syncAll } = await import('../src/sync.js');
+  await syncAll(s, { now, fetchImpl: fake });
+  await syncAll(s, { now, fetchImpl: fake });
+  assert.equal(urls.length, 1, 'only AMD, and only once');
+  assert.match(urls[0], /chart\/AMD/);
+  const by = Object.fromEntries(computeSummary(s, now).holdings.map((x) => [x.symbol, x]));
+  assert.equal(by.AMD.description, 'Advanced Micro Devices, Inc.');
+  assert.equal(by.HAS.description, 'Hasbro Inc');
+});
