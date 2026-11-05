@@ -221,9 +221,13 @@ const routes = [
     const id = decodeURIComponent(rawId);
     const a = state.accounts[id];
     if (!a) throw httpError(404, 'No such account.');
-    if (a.source !== 'manual') throw httpError(400, 'Bank accounts come back on the next sync; hide them instead.');
+    // Only accounts you made here can go; SimpleFIN ones come back on the next sync.
+    if (a.source === 'simplefin') throw httpError(400, 'Bank accounts come back on the next sync; hide them instead.');
     delete state.accounts[id];
     for (const snap of Object.values(state.snapshots)) delete snap[id];
+    // Drop prices no other account uses.
+    const inUse = new Set(pricedTickers(state));
+    for (const t of Object.keys(state.prices || {})) if (!inUse.has(t)) delete state.prices[t];
     persist();
     return { ok: true };
   }],
