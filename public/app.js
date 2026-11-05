@@ -521,39 +521,68 @@ $('disconnectBtn').addEventListener('click', () => {
 
 // ---------- 401(k): value vs. money put in ----------
 
+// The range each 401(k) chart shows (days; 0 = all), remembered in this browser.
+const growthRange = (() => { try { return JSON.parse(localStorage.getItem('fintrack.growthRange') || '{}'); } catch { return {}; } })();
+const RANGES = [[30, '1M'], [90, '3M'], [180, '6M'], [365, '1Y'], [0, 'All']];
+
 function renderGrowth() {
   const list = data.accounts.filter((a) => a.source === 'priced' && !a.hidden && a.status?.series?.length);
   const el = $('growth');
   el.innerHTML = list.map((a) => `<section class="card growth-card" data-id="${esc(a.id)}">
-      <div class="card-head"><h2>${esc(a.name)}: value vs. money put in</h2></div>
+      <div class="card-head"><h2>${esc(a.name)}: value vs. money put in</h2>
+        <div class="seg" role="group" aria-label="Time range">${RANGES.map(([d, l]) => `<button type="button" data-days="${d}">${l}</button>`).join('')}</div></div>
       <div class="growth-sum"></div>
-      <div class="legend"><span><i style="background:var(--s1)"></i>Value</span><span><i class="dash"></i>Money put in (starting balance + contributions)</span></div>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Value</span><span><i class="dash"></i>Money put in (value at the start + contributions)</span></div>
       <div class="chart"></div>
       <p class="small muted growth-note"></p>
     </section>`).join('');
   for (const a of list) {
     const card = el.querySelector(`.growth-card[data-id="${CSS.escape(a.id)}"]`);
-    const st = a.status, s = st.since;
-    const pts = st.series;
-    const gain = s.market;
+    const st = a.status;
     const rebuilt = st.history?.from && st.history.from < a.priced.asOf;
-    card.querySelector('.growth-sum').innerHTML = `<div class="ytd-row">
-      <div>Value<b>${fmt(a.value)}</b></div>
-      <div>${rebuilt ? 'Value' : 'Started tracking'} ${longDate(s.date)}<b>${fmt(s.start)}</b></div>
-      <div>Put in since<b>${signed(s.putIn)}</b></div>
-      <div>From the market since<b class="${cls(gain)}">${signed(gain)}${s.start > 0 ? ` <span class="small">(${gain >= 0 ? '+' : '−'}${Math.abs(gain / (s.start + Math.max(0, s.putIn)) * 100).toFixed(1)}%)</span>` : ''}</b></div>
-    </div>`;
     card.querySelector('.growth-note').textContent = [
       rebuilt ? `Before ${longDate(a.priced.asOf)} the values are rebuilt from your imported transactions and the funds' daily prices.`
-        : `The chart starts ${longDate(s.date)}, when this account was set up in FinTrack. Import older Paychex transactions (Import transactions) to rebuild its history.`,
+        : `The chart starts ${longDate(st.series[0].date)}, when this account was set up in FinTrack. Import older Paychex transactions (Import transactions) to rebuild its history.`,
       st.history?.stop ? `It can't go further back: ${st.history.stop}` : '',
       st.history?.filledPayouts?.length ? `${st.history.filledPayouts.length} fund payout${st.history.filledPayouts.length > 1 ? 's' : ''} weren't listed in the imported files, so FinTrack filled in their reinvestment from the funds' published payouts.` : '',
       'Contributions after the last import are estimated; reinvested fund payouts count as market growth, not money put in.',
     ].filter(Boolean).join(' ');
-    const chart = card.querySelector('.chart');
-    if (pts.length < 2) { chart.innerHTML = '<div class="empty">The chart starts with the next trading day\'s prices.</div>'; continue; }
-    twoLineChart(chart, pts);
+    const draw = () => drawGrowth(card, a, growthRange[a.id] ?? 0);
+    card.querySelector('.seg').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button');
+      if (!b) return;
+      growthRange[a.id] = Number(b.dataset.days);
+      try { localStorage.setItem('fintrack.growthRange', JSON.stringify(growthRange)); } catch { /* private window */ }
+      draw();
+    });
+    draw();
   }
+}
+
+// One range of a 401(k) chart. The "money put in" line restarts at the value
+// on the range's first day, so the gap is what the market did in that range.
+function drawGrowth(card, a, days) {
+  for (const b of card.querySelectorAll('.seg button')) b.classList.toggle('on', Number(b.dataset.days) === days);
+  const all = a.status.series;
+  let pts = all;
+  if (days) {
+    const cut = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const from = all.findIndex((p) => p.date >= cut);
+    pts = from > 0 ? all.slice(from) : all;
+  }
+  const s = pts[0], e = pts[pts.length - 1];
+  const putIn = Math.round((e.invested - s.invested) * 100) / 100;
+  const gain = Math.round((e.value - s.value - putIn) * 100) / 100;
+  const base = s.value + Math.max(0, putIn);
+  card.querySelector('.growth-sum').innerHTML = `<div class="ytd-row">
+      <div>Value<b>${fmt(e.value)}</b></div>
+      <div>Value ${longDate(s.date)}<b>${fmt(s.value)}</b></div>
+      <div>Put in since<b>${signed(putIn)}</b></div>
+      <div>From the market since<b class="${cls(gain)}">${signed(gain)}${base > 0 ? ` <span class="small">(${gain >= 0 ? '+' : '−'}${Math.abs(gain / base * 100).toFixed(1)}%)</span>` : ''}</b></div>
+    </div>`;
+  const chart = card.querySelector('.chart');
+  if (pts.length < 2) { chart.innerHTML = '<div class="empty">The chart starts with the next trading day\'s prices.</div>'; return; }
+  twoLineChart(chart, pts.map((p) => ({ ...p, invested: s.value + (p.invested - s.invested) })));
 }
 
 // Value (solid) against money put in (dashed), with a hover readout of both and the gap.
