@@ -157,3 +157,23 @@ test('an unknown ticker is reported, not fatal', async () => {
   const r = await syncAll(s, { now: new Date('2026-11-05T12:00:00'), fetchImpl: fake });
   assert.match(r.priceErrors[0], /No prices found for ZZZZX/);
 });
+
+test('value vs money put in: contributions count, payouts and price moves are market', () => {
+  const priced = { asOf: '2026-11-04', positions: [{ ticker: 'AAA', shares: 1000 }, { ticker: 'BBB', shares: 500 }], ledger: [], coveredUntil: '2026-11-05', plan };
+  const v = valuePriced(priced, PRICES, '2026-12-10');
+  const first = v.series[0], last = v.series.at(-1);
+  assert.equal(first.date, '2026-11-04');
+  assert.equal(first.invested, first.value);
+  assert.equal(last.putIn, 1200, 'the Dec 3 paycheck; the Dec 10 payout is not money put in');
+  assert.equal(last.invested, first.value + 1200);
+  const dec3 = v.series.find((p) => p.date === '2026-12-03');
+  assert.equal(dec3.putIn, 1200);
+  // An imported contribution counts; an exchange between funds doesn't.
+  const ledger = [
+    { key: 'a', date: '2026-11-05', ticker: 'AAA', shares: 10, amount: 102, kind: 'Employee Pre-Tax Contribution' },
+    { key: 'b', date: '2026-11-05', ticker: 'BBB', shares: 5, amount: 100, kind: 'Fund Transfer In' },
+    { key: 'c', date: '2026-11-05', ticker: 'AAA', shares: -9.8, amount: -100, kind: 'Fund Transfer Out' },
+  ];
+  const w = valuePriced({ ...priced, ledger, plan: { enabled: false } }, PRICES, '2026-11-05');
+  assert.equal(w.series.at(-1).putIn, 102);
+});

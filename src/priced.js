@@ -74,7 +74,7 @@ export function valuePriced(priced, prices, today) {
   const events = [];
   const waiting = [];
 
-  for (const t of priced.ledger || []) if (t.date > priced.asOf) events.push({ date: t.date, order: 1, apply: (s) => { s[t.ticker] = (s[t.ticker] || 0) + t.shares; } });
+  for (const t of priced.ledger || []) if (t.date > priced.asOf) events.push({ date: t.date, order: 1, flow: moneyIn(t), apply: (s) => { s[t.ticker] = (s[t.ticker] || 0) + t.shares; } });
 
   const estimates = [];
   const plan = priced.plan;
@@ -86,7 +86,7 @@ export function valuePriced(priced, prices, today) {
         if (!px || px.date > today) { waiting.push({ date: day, ticker }); continue; }
         const amount = (plan.amount * pct) / 100;
         const add = amount / px.close;
-        events.push({ date: px.date, order: 2, apply: (s) => { s[ticker] = (s[ticker] || 0) + add; } });
+        events.push({ date: px.date, order: 2, flow: amount, apply: (s) => { s[ticker] = (s[ticker] || 0) + add; } });
         estimates.push({ date: px.date, ticker, amount: round(amount, 2), shares: round(add, 4), kind: 'contribution' });
       }
     }
@@ -116,11 +116,13 @@ export function valuePriced(priced, prices, today) {
   // Walk the trading days from asOf, applying events as they come.
   const days = new Set([priced.asOf, today]);
   for (const t of tickers) for (const d of Object.keys(prices[t]?.closes || {})) if (d >= priced.asOf && d <= today) days.add(d);
+  // Each day: the value, and the money put in since asOf (contributions in,
+  // withdrawals out; payouts and market moves are not money put in).
   const series = [];
   const held = { ...shares };
-  let i = 0;
+  let i = 0, putIn = 0;
   for (const day of [...days].sort()) {
-    while (i < events.length && events[i].date <= day) events[i++].apply(held);
+    while (i < events.length && events[i].date <= day) { putIn += events[i].flow || 0; events[i++].apply(held); }
     let value = 0, complete = true;
     for (const [t, n] of Object.entries(held)) {
       if (!n) continue;
@@ -128,8 +130,11 @@ export function valuePriced(priced, prices, today) {
       if (!px) { complete = false; continue; }
       value += n * px.close;
     }
-    if (complete) series.push({ date: day, value: round(value, 2) });
+    if (complete) series.push({ date: day, value: round(value, 2), putIn: round(putIn, 2) });
   }
+  // "Invested": what the account held at the start plus what's been put in since.
+  const start = series[0]?.value ?? 0;
+  for (const p of series) p.invested = round(start + p.putIn, 2);
   while (i < events.length) events[i++].apply(held);
 
   const holdings = Object.entries(held).filter(([, n]) => n > 1e-9).map(([ticker, n]) => {
@@ -150,6 +155,14 @@ export function valuePriced(priced, prices, today) {
     missing,
     priceDate,
   };
+}
+
+// Money put into the account by a transaction: contributions and rollovers in,
+// withdrawals and loans out. Exchanges between funds, payouts and fees aren't.
+export function moneyIn(t) {
+  if (/contribution|rollover|deposit/i.test(t.kind || '')) return Math.abs(t.amount || 0);
+  if (/withdraw|distribution paid|loan issue/i.test(t.kind || '')) return -Math.abs(t.amount || 0);
+  return 0;
 }
 
 // Shares from a value on the asOf date (what Paychex shows per fund).

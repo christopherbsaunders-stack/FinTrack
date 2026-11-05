@@ -159,7 +159,13 @@ export function revaluePriced(state, now = new Date()) {
     a.balance = v.value;
     a.holdings = v.holdings;
     a.balanceDate = v.priceDate ? `${v.priceDate}T21:00:00.000Z` : a.balanceDate;
-    a.status = { estimates: v.estimates, estimatedSince: v.estimatedSince, waiting: v.waiting, missing: v.missing, priceDate: v.priceDate };
+    const first = v.series[0], last = v.series.at(-1);
+    a.status = {
+      estimates: v.estimates, estimatedSince: v.estimatedSince, waiting: v.waiting, missing: v.missing, priceDate: v.priceDate,
+      // For the value vs. money put in chart: one point per trading day since asOf.
+      series: v.series.map((p) => ({ date: p.date, value: p.value, invested: p.invested })),
+      since: first ? { date: first.date, start: first.value, putIn: last.putIn, market: Math.round((last.value - first.value - last.putIn) * 100) / 100 } : null,
+    };
     for (const p of v.series) {
       // Only from the first day anything was recorded: earlier, the other
       // accounts have no values and net worth would read as just this one.

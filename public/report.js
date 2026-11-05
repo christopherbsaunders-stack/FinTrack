@@ -110,6 +110,8 @@ function render() {
       const tot = funds.reduce((s, f) => s + f.value, 0) || 1;
       html += `<h3>${esc(a.name)} · ${esc(a.org)} · ${fmt(a.value)}</h3>`;
       if (plan?.enabled) html += `<p class="note">Contributions: ${cents(plan.amount)} per paycheck (employee and employer together), ${scheduleText(plan.schedule)}.</p>`;
+      const since = a.status?.since;
+      if (since && a.status.series.length > 1) html += `<p class="note">Since ${date(since.date)} (when tracking began): ${signed(since.putIn)} put in, ${signed(since.market)} from the market (fund price changes and reinvested payouts).</p>`;
       html += `<table><thead><tr><th>Fund</th><th class="n">Shares</th><th class="n">Price</th><th class="n">Value</th><th class="n">Now</th><th class="n">Future contributions</th></tr></thead><tbody>
         ${funds.map((f) => `<tr><td><b>${esc(f.symbol)}</b> ${esc(f.description)}</td><td class="n">${f.shares.toLocaleString('en-US', { maximumFractionDigits: 3 })}</td><td class="n">${cents(f.price)}</td><td class="n">${fmt(f.value)}</td><td class="n">${pct(f.value / tot, 1)}</td><td class="n">${plan?.allocation?.[f.symbol] != null ? `${plan.allocation[f.symbol]}%` : '–'}</td></tr>`).join('')}
       </tbody></table>`;

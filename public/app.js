@@ -90,6 +90,7 @@ function render() {
   renderAccounts();
   renderHoldings();
   renderLoans();
+  renderGrowth();
   renderBuckets();
   renderBudget();
   renderTransactions();
@@ -516,6 +517,77 @@ $('settingsForm').addEventListener('submit', (ev) => {
 $('disconnectBtn').addEventListener('click', () => {
   if (confirm('Disconnect SimpleFIN? Syncing stops until you paste a new setup token.')) { $('settings').close(); act(() => post('/api/disconnect')); }
 });
+
+// ---------- 401(k): value vs. money put in ----------
+
+function renderGrowth() {
+  const list = data.accounts.filter((a) => a.source === 'priced' && !a.hidden && a.status?.series?.length);
+  const el = $('growth');
+  el.innerHTML = list.map((a) => `<section class="card growth-card" data-id="${esc(a.id)}">
+      <div class="card-head"><h2>${esc(a.name)}: value vs. money put in</h2></div>
+      <div class="growth-sum"></div>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Value</span><span><i class="dash"></i>Money put in (starting balance + contributions)</span></div>
+      <div class="chart"></div>
+      <p class="small muted growth-note"></p>
+    </section>`).join('');
+  for (const a of list) {
+    const card = el.querySelector(`.growth-card[data-id="${CSS.escape(a.id)}"]`);
+    const st = a.status, s = st.since;
+    const pts = st.series;
+    const gain = s.market;
+    card.querySelector('.growth-sum').innerHTML = `<div class="ytd-row">
+      <div>Value<b>${fmt(a.value)}</b></div>
+      <div>Started tracking ${shortDate(s.date)}<b>${fmt(s.start)}</b></div>
+      <div>Put in since<b>${signed(s.putIn)}</b></div>
+      <div>From the market since<b class="${cls(gain)}">${signed(gain)}${s.start > 0 ? ` <span class="small">(${gain >= 0 ? '+' : '−'}${Math.abs(gain / (s.start + Math.max(0, s.putIn)) * 100).toFixed(1)}%)</span>` : ''}</b></div>
+    </div>`;
+    card.querySelector('.growth-note').textContent = `The chart starts ${longDate(s.date)}, when this account was set up in FinTrack, and adds a point every trading day. Contributions are estimated until you import Paychex transactions; reinvested fund payouts count as market growth, not money put in.`;
+    const chart = card.querySelector('.chart');
+    if (pts.length < 2) { chart.innerHTML = '<div class="empty">The chart starts with the next trading day\'s prices.</div>'; continue; }
+    twoLineChart(chart, pts);
+  }
+}
+
+// Value (solid) against money put in (dashed), with a hover readout of both and the gap.
+function twoLineChart(el, pts) {
+  el.innerHTML = '';
+  const W = Math.max(320, el.clientWidth || 800), H = 240, L = 64, R = 12, T = 12, B = 28;
+  const all = pts.flatMap((p) => [p.value, p.invested]);
+  const ticks = niceTicks(Math.min(...all), Math.max(...all));
+  const y0 = ticks[0], y1 = ticks.at(-1);
+  const last = pts.length - 1;
+  const x = (i) => L + (i / last) * (W - L - R);
+  const y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Value ${fmt(pts[last].value)} against ${fmt(pts[last].invested)} put in` }, el);
+  for (const tv of ticks) {
+    svg('line', { x1: L, x2: W - R, y1: y(tv), y2: y(tv), class: 'gridline' }, root);
+    svg('text', { x: L - 8, y: y(tv) + 4, 'text-anchor': 'end' }, root).textContent = compact(tv);
+  }
+  const nx = Math.max(2, Math.min(6, pts.length, Math.floor((W - L) / 90)));
+  for (let k = 0; k < nx; k++) {
+    const i = Math.round((k / (nx - 1)) * last);
+    svg('text', { x: x(i), y: H - 8, 'text-anchor': k === 0 ? 'start' : k === nx - 1 ? 'end' : 'middle' }, root).textContent = shortDate(pts[i].date);
+  }
+  const path = (key) => pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join('');
+  svg('path', { d: path('invested'), fill: 'none', stroke: 'var(--muted)', 'stroke-width': 2, 'stroke-dasharray': '5 4', 'stroke-linejoin': 'round' }, root);
+  svg('path', { d: path('value'), fill: 'none', stroke: 'var(--s1)', 'stroke-width': 2, 'stroke-linejoin': 'round' }, root);
+  svg('circle', { cx: x(last), cy: y(pts[last].value), r: 4, fill: 'var(--s1)', stroke: 'var(--surface)', 'stroke-width': 2 }, root);
+  const cross = svg('line', { y1: T, y2: H - B, class: 'cross', visibility: 'hidden' }, root);
+  const hit = svg('rect', { x: L, y: 0, width: W - L - R, height: H, fill: 'transparent' }, root);
+  const move = (ev) => {
+    const box = root.getBoundingClientRect();
+    const i = Math.max(0, Math.min(last, Math.round(((((ev.clientX - box.left) / box.width) * W) - L) / (W - L - R) * last)));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+    const p = pts[i], g = p.value - p.invested;
+    showTip(`<div class="t">${longDate(p.date)}</div>
+      <div class="r"><span><i style="background:var(--s1)"></i>Value</span><b>${fmt(p.value)}</b></div>
+      <div class="r"><span><i style="background:var(--muted)"></i>Put in</span><b>${fmt(p.invested)}</b></div>
+      <div class="r"><span>From the market</span><b class="${cls(g)}">${signed(g)}</b></div>`, ev);
+  };
+  hit.addEventListener('pointermove', move);
+  hit.addEventListener('pointerdown', move);
+  hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
+}
 
 // ---------- buckets: one account split into named parts ----------
 
@@ -1080,6 +1152,6 @@ $('importFile').addEventListener('change', async () => {
 });
 
 let resizeTimer;
-addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => data && (renderNetWorthChart(), renderCashFlow(), document.querySelectorAll('.loan-card').forEach((c) => c.redraw?.())), 150); });
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => data && (renderNetWorthChart(), renderCashFlow(), renderGrowth(), document.querySelectorAll('.loan-card').forEach((c) => c.redraw?.())), 150); });
 setInterval(load, 5 * 60 * 1000);
 load();

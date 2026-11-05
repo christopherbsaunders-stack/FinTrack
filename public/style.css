@@ -229,3 +229,5 @@ a.btn-link:hover { border-color: var(--muted); }
 .budget-table { margin-top: 12px; }
 .budget-table td.center, .budget-table th.center { width: 90px; }
 #budgetBody .ytd-row { margin-bottom: 6px; }
+.legend i.dash { background: none; border-top: 2px dashed var(--muted); height: 0; }
+.growth-sum .ytd-row { margin-bottom: 4px; }
