@@ -227,16 +227,25 @@ function topHoldings(accounts) {
     for (const h of a.holdings || []) {
       const key = h.symbol || h.description;
       if (!key) continue;
-      const cur = map.get(key) || { symbol: h.symbol, description: h.description, value: 0, costBasis: 0, hasBasis: true, shares: 0, price: null };
+      // SimpleFIN fills a missing name with "0.146 shares of AMD"; that says nothing the columns don't.
+      const description = /^[\d.,]+ shares? of /i.test(h.description || '') ? '' : h.description;
+      const cur = map.get(key) || { symbol: h.symbol, description, value: 0, costBasis: 0, hasBasis: true, shares: 0, price: null };
+      if (!cur.description && description) cur.description = description;
       cur.value += h.value;
       cur.shares += Number(h.shares) || 0;
       if (h.price) cur.price = h.price;
-      if (h.costBasis == null) cur.hasBasis = false; else cur.costBasis += h.costBasis;
+      // A cost of 0 means the brokerage didn't say (saved before that was handled on sync).
+      if (h.costBasis == null || (h.costBasis === 0 && h.value > 0)) cur.hasBasis = false; else cur.costBasis += h.costBasis;
       map.set(key, cur);
     }
   }
   return [...map.values()].sort((a, b) => b.value - a.value).slice(0, 25)
-    .map((h) => ({ ...h, value: r2(h.value), shares: Math.round(h.shares * 1e4) / 1e4, gain: h.hasBasis ? r2(h.value - h.costBasis) : null }));
+    .map((h) => ({
+      ...h, value: r2(h.value), shares: Math.round(h.shares * 1e4) / 1e4,
+      // Brokerages send shares and market value; the price is the one they valued it at.
+      price: h.price ?? (h.shares > 0 ? Math.round((h.value / h.shares) * 100) / 100 : null),
+      gain: h.hasBasis ? r2(h.value - h.costBasis) : null,
+    }));
 }
 
 function sum(list) { return r2(list.reduce((s, v) => s + v, 0)); }

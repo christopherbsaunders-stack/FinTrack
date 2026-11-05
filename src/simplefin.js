@@ -90,7 +90,9 @@ export function normalizeAccountSet(raw) {
       description: String(h.description || h.symbol || ''),
       shares: toNumber(h.shares),
       value: toNumber(h.market_value),
-      costBasis: h.cost_basis == null ? null : toNumber(h.cost_basis),
+      // Some brokerages (Robinhood among them) send 0 when they don't share
+      // what you paid; a real holding never cost nothing, so treat 0 as unknown.
+      costBasis: h.cost_basis == null || toNumber(h.cost_basis) === 0 ? null : toNumber(h.cost_basis),
     })),
     transactions: (a.transactions || []).map((t) => ({
       id: String(t.id),

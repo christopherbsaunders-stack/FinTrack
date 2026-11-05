@@ -38,7 +38,7 @@ test('fetchAccounts sends auth and dates, and normalizes the reply', async () =>
       accounts: [{
         org: { name: 'Chase' }, id: 'A1', name: 'Checking', currency: 'USD', balance: '1,234.56', 'available-balance': '1200.00', 'balance-date': 1760000000,
         transactions: [{ id: 'T1', posted: 1759900000, amount: '-12.34', description: 'Coffee' }, { id: 'T2', posted: 0, amount: '-5', description: 'Pending' }],
-        holdings: [{ symbol: 'VTI', description: 'VTI', shares: '3', market_value: '900.10', cost_basis: '800' }],
+        holdings: [{ symbol: 'VTI', description: 'VTI', shares: '3', market_value: '900.10', cost_basis: '800' }, { symbol: 'HAS', shares: '2', market_value: '240', cost_basis: '0.00' }],
       }],
     });
   };
@@ -53,6 +53,8 @@ test('fetchAccounts sends auth and dates, and normalizes the reply', async () =>
   assert.equal(a.transactions[0].pending, false);
   assert.equal(a.transactions[1].pending, true);
   assert.equal(a.holdings[0].value, 900.1);
+  assert.equal(a.holdings[0].costBasis, 800);
+  assert.equal(a.holdings[1].costBasis, null, 'a cost of 0 means the brokerage did not say');
 });
 
 test('normalize copes with an empty reply', () => {

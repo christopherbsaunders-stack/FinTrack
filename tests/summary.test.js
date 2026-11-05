@@ -140,3 +140,21 @@ test('loans with details get a payoff summary; the details survive a sync', () =
   applyAccountSet(s, { accounts: [acct('mtg', 'Mortgage', 'Rocket Mortgage', -283500)] }, now);
   assert.equal(s.accounts.mtg.loan.rate, 6.25);
 });
+
+test('brokerage holdings: price from value and shares; a cost of 0 is unknown, not all gain', () => {
+  const s = emptyState();
+  const rh = acct('rh', 'Individual', 'Robinhood', 640);
+  rh.holdings = [
+    { symbol: 'HAS', description: 'Hasbro Inc', shares: 2.015, value: 240, costBasis: 0 },
+    { symbol: 'AMD', description: '0.146 shares of AMD', shares: 0.146, value: 61, costBasis: null },
+    { symbol: 'VOO', description: 'Vanguard 500 Index Fund', shares: 0.5, value: 339, costBasis: 300 },
+  ];
+  applyAccountSet(s, { accounts: [rh] }, now);
+  const h = computeSummary(s, now).holdings;
+  const by = Object.fromEntries(h.map((x) => [x.symbol, x]));
+  assert.equal(by.HAS.price, 119.11);
+  assert.equal(by.HAS.gain, null);
+  assert.equal(by.AMD.description, '');
+  assert.equal(by.VOO.gain, 39);
+  assert.equal(by.VOO.price, 678);
+});
