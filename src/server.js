@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { loadState, saveState } from './store.js';
 import { claimAccessUrl } from './simplefin.js';
-import { syncAll, recordSnapshot, revaluePriced, pricedTickers } from './sync.js';
+import { syncAll, recordSnapshot, revaluePriced, pricedTickers, indexSeries, refreshIndexes } from './sync.js';
+import { anchor } from './hpi.js';
 import { refreshPrices } from './prices.js';
 import { parsePaychexCsv, sharesFromValue } from './priced.js';
 import { computeSummary } from './summary.js';
@@ -57,7 +58,7 @@ async function runSync(reason) {
 }
 
 function syncDue() {
-  if (DEMO || (!state.accessUrl && !pricedTickers(state).length)) return false;
+  if (DEMO || (!state.accessUrl && !pricedTickers(state).length && !indexSeries(state).length)) return false;
   const last = state.lastAttempt ? new Date(state.lastAttempt).getTime() : 0;
   return Date.now() - last >= (state.settings.syncHours || 6) * 3600000;
 }
@@ -177,7 +178,7 @@ const routes = [
   }],
 
   ['POST', /^\/api\/manual$/, async (req) => {
-    const { name, category, value } = await readJson(req);
+    const { name, category, value, index } = await readJson(req);
     if (!String(name || '').trim()) throw httpError(400, 'Give the account a name.');
     if (!CATEGORIES[category]) throw httpError(400, 'Unknown category.');
     const v = Number(value);
@@ -189,7 +190,8 @@ const routes = [
       balanceDate: now, holdings: [], source: 'manual', category, categoryOverride: category,
       displayName: null, hidden: false, firstSeen: now, lastSeen: now,
     };
-    recordSnapshot(state);
+    if (index) state.accounts[id].index = await anchorTo(String(index).toUpperCase(), v);
+    revaluePriced(state);
     persist();
     return { ok: true, id };
   }],
@@ -212,8 +214,23 @@ const routes = [
       if (!Number.isFinite(v)) throw httpError(400, 'Value must be a number.');
       a.balance = v;
       a.balanceDate = new Date().toISOString();
+      // A value you type wins: follow the index again from it.
+      if (a.index) a.index = await anchorTo(a.index.series, v);
     }
-    recordSnapshot(state);
+    revaluePriced(state);
+    persist();
+    return { ok: true };
+  }],
+
+  // Follow a house price index from the current value; null stops following.
+  ['PUT', /^\/api\/accounts\/([^/]+)\/index$/, async (req, [, rawId]) => {
+    const a = state.accounts[decodeURIComponent(rawId)];
+    if (!a || a.source !== 'manual') throw httpError(404, 'Only accounts you entered by hand can follow a price index.');
+    const { series } = await readJson(req);
+    if (!series) delete a.index;
+    else a.index = await anchorTo(String(series).trim().toUpperCase(), a.balance);
+    pruneIndexes();
+    revaluePriced(state);
     persist();
     return { ok: true };
   }],
@@ -242,10 +259,25 @@ const routes = [
     // Drop prices no other account uses.
     const inUse = new Set(pricedTickers(state));
     for (const t of Object.keys(state.prices || {})) if (!inUse.has(t)) delete state.prices[t];
+    pruneIndexes();
     persist();
     return { ok: true };
   }],
 ];
+
+// Start following `series` from `value` now, fetching the series if needed.
+async function anchorTo(series, value) {
+  if (!state.indexes?.[series]?.obs || !Object.keys(state.indexes[series].obs).length || state.indexes[series].error) {
+    const errors = await refreshIndexes(state, [series], { force: true });
+    if (errors.length) throw httpError(400, state.indexes[series].error);
+  }
+  return anchor(series, value, state.indexes[series].obs);
+}
+
+function pruneIndexes() {
+  const inUse = new Set(indexSeries(state));
+  for (const id of Object.keys(state.indexes || {})) if (!inUse.has(id)) delete state.indexes[id];
+}
 
 function cleanName(s, fallback) { return String(s || '').trim().slice(0, 80) || fallback; }
 
@@ -338,8 +370,8 @@ const server = createServer(async (req, res) => {
       return send(res, 404, { error: 'Not found.' });
     }
     if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed.' });
-    // The dashboard uses the same loan math as the server.
-    if (url.pathname === '/loans.js') return send(res, 200, await readFile(join(ROOT, 'src', 'loans.js')), MIME['.js']);
+    // The dashboard uses the same loan and price index code as the server.
+    if (url.pathname === '/loans.js' || url.pathname === '/hpi.js') return send(res, 200, await readFile(join(ROOT, 'src', url.pathname.slice(1))), MIME['.js']);
     const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     if (!/^[\w.-]+$/.test(file) || !MIME[extname(file)]) return send(res, 404, 'Not found', 'text/plain');
     return send(res, 200, await readFile(join(PUBLIC, file)), MIME[extname(file)]);

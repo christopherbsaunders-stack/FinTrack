@@ -17,6 +17,8 @@ export function emptyState() {
     transactions: {},     // id -> transaction (with accountId)
     prices: {},           // ticker -> { closes: { date: close }, events: [payouts, splits] }
     priceErrors: [],
+    indexes: {},          // FRED series id -> { obs: { date: value }, fetchedAt }
+    indexErrors: [],
     lastPriceSync: null,
     settings: { syncHours: 6 },
   };

@@ -88,6 +88,8 @@
         <input id="mName" placeholder="Name (e.g. Home, 2021 RAV4)" required maxlength="80">
         <select id="mCat"></select>
         <input id="mValue" type="number" step="0.01" placeholder="Value" required>
+        <select id="mIndex" class="index-select" aria-label="Adjust with home prices"></select>
+        <input id="mIndexCustom" placeholder="FRED series id" hidden aria-label="FRED series id">
         <button type="submit">Add</button>
       </form>
       <div class="table-wrap"><table id="accounts"></table></div>
@@ -120,6 +122,23 @@
       <hr>
       <button type="button" id="disconnectBtn" class="danger">Disconnect SimpleFIN</button>
       <p class="muted small">Forgets the access link. Your history stays. To cut access entirely, also delete the connection in SimpleFIN Bridge.</p>
+    </form>
+  </dialog>
+
+ <dialog id="indexDlg">
+    <form id="indexForm">
+      <h2 id="indexTitle">Follow home prices</h2>
+      <p class="muted small">Your home's value moves with a house price index (the FHFA House Price Index, from FRED). Each time a new quarter comes out, FinTrack scales your value by how much the index moved. When you type in a new value, it starts over from that.</p>
+      <div class="form-grid">
+        <label>Index <select id="ixSelect" class="index-select"></select></label>
+        <label id="ixCustomWrap" hidden>FRED series id <input id="ixCustom" placeholder="ATNHPIUS51107A"></label>
+      </div>
+      <p class="muted small">A state's index comes out every quarter. For your county, choose "Another FRED series" and enter its id: county series look like ATNHPIUS<i>NNNNN</i>A (for example ATNHPIUS51107A is Loudoun County, VA). They're more local but come out once a year. Find one by searching "All-Transactions House Price Index" and your county at fred.stlouisfed.org.</p>
+      <div id="ixError" class="form-error" role="alert"></div>
+      <div class="row">
+        <button type="submit" id="ixSave">Save</button>
+        <button type="button" class="ghost" id="ixCancel">Cancel</button>
+      </div>
     </form>
   </dialog>
 

@@ -6,6 +6,7 @@ import { guessCategory, signedValue } from './classify.js';
 import { dayKey } from './store.js';
 import { refreshPrices } from './prices.js';
 import { valuePriced } from './priced.js';
+import { fetchSeries, indexedValue, seriesLabel, staleness } from './hpi.js';
 
 const DAY = 86400000;
 const FIRST_SYNC_DAYS = 89;    // fetched in MAX_RANGE_DAYS pieces
@@ -25,6 +26,8 @@ export async function syncAll(state, { now = new Date(), fetchImpl } = {}) {
     state.priceErrors = out.priceErrors;
     state.lastPriceSync = now.toISOString();
   }
+  const series = indexSeries(state);
+  if (series.length) out.indexErrors = state.indexErrors = await refreshIndexes(state, series, { now, fetchImpl });
   state.lastAttempt = now.toISOString();
   revaluePriced(state, now);
   return out;
@@ -110,7 +113,40 @@ export function pricedTickers(state) {
 
 // Value every priced account from its shares and the latest prices, fill in
 // its past days since asOf (from the price history), and record today.
+export function indexSeries(state) {
+  return [...new Set(Object.values(state.accounts).map((a) => a.index?.series).filter(Boolean))].sort();
+}
+
+// House price indexes change once a quarter (or year): one fetch a day is plenty.
+export async function refreshIndexes(state, series, { now = new Date(), fetchImpl, force = false } = {}) {
+  state.indexes ||= {};
+  const errors = [];
+  for (const id of series) {
+    const have = state.indexes[id];
+    if (!force && have?.fetchedAt && now - new Date(have.fetchedAt) < 20 * 3600000 && !have.error) continue;
+    try {
+      state.indexes[id] = { obs: await fetchSeries(id, fetchImpl), fetchedAt: now.toISOString(), error: null };
+    } catch (err) {
+      state.indexes[id] = { ...(have || { obs: {} }), error: err.message, failedAt: now.toISOString() };
+      errors.push(`${seriesLabel(id)}: ${err.message}`);
+    }
+  }
+  return errors;
+}
+
+// Accounts whose value follows a house price index.
+export function revalueIndexed(state, now = new Date()) {
+  for (const a of Object.values(state.accounts)) {
+    if (!a.index) continue;
+    const obs = state.indexes?.[a.index.series]?.obs || {};
+    const v = indexedValue(a.index, obs);
+    a.balance = v.value;
+    a.indexStatus = { label: seriesLabel(a.index.series), change: v.change, latestDate: v.latestDate, since: a.index.anchorDate, stale: staleness(a.index.series, obs, dayKey(now)) };
+  }
+}
+
 export function revaluePriced(state, now = new Date()) {
+  revalueIndexed(state, now);
   const today = dayKey(now);
   const firstDay = Object.keys(state.snapshots).sort()[0] || today;
   for (const a of Object.values(state.accounts)) {

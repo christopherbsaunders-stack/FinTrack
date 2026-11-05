@@ -1,6 +1,7 @@
 // FinTrack dashboard. Fetches /api/summary and draws everything; no libraries.
 
 import { compare, byYear, scheduledPayment, addMonths } from './loans.js';
+import { STATES } from './hpi.js';
 
 const $ = (id) => document.getElementById(id);
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -64,6 +65,8 @@ function render() {
   $('syncStatus').textContent = data.demo ? 'Made-up accounts' : data.connected ? `Synced ${ago(data.lastSync)}` : data.hasPriced ? `Prices ${ago(data.lastPriceSync)}` : 'Not connected';
 
   $('notices').innerHTML = (data.errors || []).map((e) => `<div class="notice"><b>SimpleFIN:</b> ${esc(e)}</div>`).join('')
+    + (data.indexErrors || []).map((e) => `<div class="notice"><b>Home prices:</b> ${esc(e)} The home keeps its last value.</div>`).join('')
+    + data.accounts.filter((a) => a.indexStatus?.stale).map((a) => `<div class="notice"><b>${esc(a.name)}:</b> ${esc(a.indexStatus.stale)}</div>`).join('')
     + (data.priceErrors || []).map((e) => `<div class="notice"><b>Prices:</b> ${esc(e)} The balance uses the last price found.</div>`).join('');
 
   $('netWorth').textContent = fmt(t.netWorth);
@@ -265,13 +268,14 @@ function renderAccounts() {
     const manual = a.source === 'manual';
     const priced = a.source === 'priced';
     html += `<tr class="${a.hidden ? 'hidden-row' : ''}" data-id="${esc(a.id)}">
-      <td>${esc(a.name)}<span class="sub">${esc(a.org)}${priced ? ` · ${a.holdings.length} funds, priced daily` : ''}</span>${priced ? estimateNote(a) : ''}</td>
+      <td>${esc(a.name)}<span class="sub">${esc(a.org)}${priced ? ` · ${a.holdings.length} funds, priced daily` : ''}</span>${priced ? estimateNote(a) : ''}${a.indexStatus ? indexNote(a) : ''}</td>
       <td><select data-act="category" aria-label="Category for ${esc(a.name)}">${categoryOptions(a.category)}</select></td>
       <td class="num">${fmtCents(a.value)}</td>
       <td class="num ${cls(a.change30)}">${a.change30 == null ? '<span class="muted">–</span>' : signed(a.change30)}</td>
-      <td class="small muted">${manual ? 'You set it' : priced ? (a.status?.priceDate ? `Close ${shortDate(a.status.priceDate)}` : 'No price yet') : ago(a.balanceDate)}</td>
+      <td class="small muted">${manual ? (a.indexStatus?.latestDate ? `Index ${periodLabel(a.indexStatus.latestDate, a.indexStatus)}` : 'You set it') : priced ? (a.status?.priceDate ? `Close ${shortDate(a.status.priceDate)}` : 'No price yet') : ago(a.balanceDate)}</td>
       <td class="num">
         ${manual ? '<button class="linkish" data-act="value">Update value</button> · ' : ''}
+        ${manual && a.category === 'property' ? `<button class="linkish" data-act="index">${a.index ? 'Price index' : 'Follow home prices'}</button> · ` : ''}
         ${LOAN_CATS.has(a.category) ? `<button class="linkish" data-act="loan">${a.loan ? 'Loan details' : 'Add loan details'}</button> · ` : ''}
         ${priced ? '<button class="linkish" data-act="import">Import transactions</button> · <button class="linkish" data-act="editPriced">Edit holdings</button> · ' : ''}
         <button class="linkish" data-act="rename">Rename</button> ·
@@ -368,17 +372,78 @@ $('setupForm').addEventListener('submit', async (ev) => {
   b.disabled = false; b.textContent = 'Connect';
 });
 
+// ---------- home value following a price index ----------
+
+// "Don't adjust", the US, every state, and any other FRED series.
+function indexOptions(selected, { none = "Don't adjust it" } = {}) {
+  const known = selected === 'USSTHPI' || /^[A-Z]{2}STHPI$/.test(selected || '') && STATES[selected.slice(0, 2)];
+  const opts = [['', none], ['USSTHPI', 'US home prices'], ...Object.entries(STATES).map(([code, name]) => [`${code}STHPI`, `${name} home prices`]), ['other', 'Another FRED series…']];
+  const pick = !selected ? '' : known ? selected : 'other';
+  return opts.map(([v, l]) => `<option value="${v}"${v === pick ? ' selected' : ''}>${esc(l)}</option>`).join('');
+}
+// An index observation's period: a quarter, or a year for a yearly (county) series.
+function periodLabel(date, st) {
+  const [y, m] = date.split('-').map(Number);
+  return /\(yearly\)/.test(st?.label || '') ? String(y) : `Q${Math.floor((m - 1) / 3) + 1} ${y}`;
+}
+function indexNote(a) {
+  const st = a.indexStatus;
+  const pct = `${st.change >= 0 ? '+' : '−'}${Math.abs(st.change * 100).toFixed(1)}%`;
+  return `<span class="index-note">Follows ${esc(st.label.replace(/ \((quarterly|yearly)\)$/, ''))}: <span class="${cls(st.change * 1000)}">${pct}</span> since you set it (${periodLabel(st.since, st)} index)</span>`;
+}
+
+function syncManualIndex() {
+  const isHome = $('mCat').value === 'property';
+  $('mIndex').hidden = !isHome;
+  $('mIndexCustom').hidden = !isHome || $('mIndex').value !== 'other';
+}
+
 $('addManualBtn').addEventListener('click', () => {
   const f = $('manualForm');
   f.hidden = !f.hidden;
-  if (!f.hidden) { $('mCat').innerHTML = categoryOptions('property'); $('mName').focus(); }
+  if (!f.hidden) {
+    $('mCat').innerHTML = categoryOptions('property');
+    $('mIndex').innerHTML = indexOptions('', { none: "Don't follow home prices" });
+    syncManualIndex();
+    $('mName').focus();
+  }
 });
+$('mCat').addEventListener('change', syncManualIndex);
+$('mIndex').addEventListener('change', syncManualIndex);
 $('manualForm').addEventListener('submit', (ev) => {
   ev.preventDefault();
+  const sel = $('mCat').value === 'property' ? $('mIndex').value : '';
+  const index = sel === 'other' ? $('mIndexCustom').value.trim() : sel;
   act(async () => {
-    await post('/api/manual', { name: $('mName').value, category: $('mCat').value, value: $('mValue').value });
+    await post('/api/manual', { name: $('mName').value, category: $('mCat').value, value: $('mValue').value, index: index || null });
     $('manualForm').reset(); $('manualForm').hidden = true;
   });
+});
+
+let indexAccount = null;
+function openIndex(a) {
+  indexAccount = a;
+  $('indexTitle').textContent = `${a.name}: follow home prices`;
+  $('ixSelect').innerHTML = indexOptions(a.index?.series || '');
+  $('ixCustom').value = a.index && $('ixSelect').value === 'other' ? a.index.series : '';
+  $('ixCustomWrap').hidden = $('ixSelect').value !== 'other';
+  $('ixError').textContent = '';
+  $('indexDlg').showModal();
+}
+$('ixSelect').addEventListener('change', () => { $('ixCustomWrap').hidden = $('ixSelect').value !== 'other'; });
+$('ixCancel').addEventListener('click', () => $('indexDlg').close());
+$('indexForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const sel = $('ixSelect').value;
+  const series = sel === 'other' ? $('ixCustom').value.trim() : sel;
+  if (sel === 'other' && !series) { $('ixError').textContent = 'Enter a FRED series id.'; return; }
+  const btn = $('ixSave');
+  btn.disabled = true; btn.textContent = 'Checking the index…';
+  try {
+    await api(`/api/accounts/${encodeURIComponent(indexAccount.id)}/index`, { method: 'PUT', body: JSON.stringify({ series: series || null }) });
+    $('indexDlg').close();
+    await load();
+  } catch (err) { $('ixError').textContent = err.message; } finally { btn.disabled = false; btn.textContent = 'Save'; }
 });
 
 $('accounts').addEventListener('change', (ev) => {
@@ -403,6 +468,7 @@ $('accounts').addEventListener('click', (ev) => {
     if (v !== null && v.trim() !== '') act(() => patch(path, { balance: Number(v.replace(/[$,\s]/g, '')) }));
   }
   if (b.dataset.act === 'loan') openLoan(a);
+  if (b.dataset.act === 'index') openIndex(a);
   if (b.dataset.act === 'editPriced') openPriced(a);
   if (b.dataset.act === 'import') { importTarget = a; $('importFile').value = ''; $('importFile').click(); }
   if (b.dataset.act === 'delete' && confirm(`Delete ${a.name} and its history?`)) act(() => api(path, { method: 'DELETE' }));

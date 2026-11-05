@@ -52,6 +52,7 @@ export function computeSummary(state, now = new Date()) {
     lastAttempt: state.lastAttempt,
     errors: state.lastErrors || [],
     priceErrors: state.priceErrors || [],
+    indexErrors: state.indexErrors || [],
     lastPriceSync: state.lastPriceSync || null,
     hasPriced: accounts.some((a) => a.source === 'priced'),
     syncHours: state.settings?.syncHours,

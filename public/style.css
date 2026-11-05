@@ -204,3 +204,5 @@ details.sched { margin-top: 14px; }
 details.sched summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--accent); }
 .loan-warn { margin-top: 10px; }
 .loan-prompt { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.index-select { max-width: 100%; }
+.index-note { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }

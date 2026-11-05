@@ -43,7 +43,7 @@ The account shows what's estimated ("Estimated since Nov 5: 1 paycheck ($1,715.8
 - this year's interest, principal and escrow (estimated until FinTrack has tracked the loan since January 1; your Form 1098 has the exact interest);
 - a year-by-year schedule.
 
-**Home and car values.** Use **Add home, car or other** and update the value now and then. The dashboard shows equity (value minus the loan).
+**Home and car values.** Use **Add home, car or other**. For a home, choose **Follow home prices**: your state's FHFA House Price Index (quarterly, from FRED), the US index, or any other FRED series, such as your county's (yearly; Loudoun County, VA is ATNHPIUS51107A). FinTrack remembers the index when you enter the value and scales the value each time a new quarter (or year) comes out; the row shows how far it has moved ("+1.7% since you set it"). When you have a better number (Zillow, Redfin, an appraisal), click **Update value**: it starts following the index again from there. If a series stops being published, the dashboard says so. A car's value you update by hand. The dashboard shows equity (value minus the loan).
 
 ## Where your data lives
 
@@ -84,6 +84,7 @@ src/sync.js        merge a fetch into the state; record today's value of every a
 src/classify.js    categories (asset or debt) and the guess from an account's name
 src/summary.js     totals, history, cash flow, holdings for the dashboard (pure, tested)
 src/loans.js       loan math: payoff, interest vs principal, extra payments (also loaded by the dashboard)
+src/hpi.js         home values that follow a house price index (FRED)
 src/prices.js      daily fund prices and payouts from Yahoo Finance
 src/priced.js      accounts valued from their holdings: paydays, estimates, Paychex CSV import
 src/store.js       the JSON state file
