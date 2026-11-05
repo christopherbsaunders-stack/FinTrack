@@ -166,17 +166,17 @@
           <label>Per paycheck, yours + match ($) <input id="pAmount" type="number" step="0.01" min="0"></label>
           <label>Paid
             <select id="pEvery">
-              <option value="lastBusiness">Last business day of each month</option>
-              <option value="monthDay">On a day of each month</option>
+              <option value="lastBusiness">Monthly, last business day</option>
+              <option value="monthDay">Monthly, on a set day</option>
               <option value="2weeks">Every 2 weeks</option>
               <option value="week">Every week</option>
             </select>
           </label>
           <label id="pDayWrap" hidden>Day of the month <input id="pDay" type="number" min="1" max="31" value="15"></label>
           <label id="pAnchorWrap" hidden>A recent payday <input id="pAnchor" type="date"></label>
-          <label>Invested this many business days after payday <input id="pLag" type="number" min="0" max="10" value="3"></label>
+          <label>Business days until invested <input id="pLag" type="number" min="0" max="10" value="3"></label>
         </div>
-        <p class="muted small" id="pNext"></p>
+        <p class="muted small" id="pNext">Business days until invested: how long after payday the money is bought into the funds. Paid on a Friday and invested the next Wednesday is 3.</p>
       </fieldset>
 
       <div id="pError" class="form-error" role="alert"></div>

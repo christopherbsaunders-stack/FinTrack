@@ -164,8 +164,8 @@ dialog fieldset { border: 1px solid var(--border); border-radius: 10px; margin: 
 dialog legend { font-weight: 600; font-size: 13px; padding: 0 4px; }
 dialog legend input { width: auto; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 14px; margin-top: 10px; }
-.form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
-.form-grid input, .form-grid select { width: 100%; }
+.form-grid label { display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; font-size: 12px; color: var(--text-2); }
+.form-grid input, .form-grid select { width: 100%; height: 36px; }
 .fund-rows input { width: 100%; min-width: 70px; padding: 5px 8px; }
 .fund-rows td { padding: 4px 4px; border-bottom: 0; }
 .fund-rows td:first-child input { width: 80px; text-transform: uppercase; }
@@ -179,3 +179,4 @@ dialog legend input { width: auto; }
 .file-pick label { cursor: pointer; }
 .file-pick input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
 .file-name { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+@media (min-width: 640px) { #pPlan { grid-template-columns: 1fr 1.3fr 1fr; } }
