@@ -186,7 +186,7 @@ dialog legend input { width: auto; }
 .loan-tiles .tile { background: var(--bg); }
 .split { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 8px; gap: 2px; }
 .split span { display: block; height: 100%; }
-.split-key { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-2); margin-top: 4px; }
+.split-key { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; color: var(--text-2); margin-top: 4px; }
 .split-key i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
 .whatif { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
 .whatif h3, .loan-card h3 { font-size: 13px; font-weight: 650; margin: 0 0 10px; }

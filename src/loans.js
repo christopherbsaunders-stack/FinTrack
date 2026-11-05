@@ -3,8 +3,10 @@
 //
 // loan details (account.loan): {
 //   rate:      APR in percent (6.125)
-//   payment:   the whole monthly payment ($2,400)
+//   payment:   what you pay each month, all of it ($2,400)
 //   escrow:    the part of it that isn't the loan: taxes, insurance, PMI
+//   required:  optional, the amount due on the statement ($2,220.12); what
+//              you pay over it is extra principal
 //   original:  optional, amount borrowed
 //   termYears: optional, loan length (30)
 //   firstPayment: optional, 'YYYY-MM' of the first payment
@@ -125,14 +127,35 @@ export function loanSummary(loan, balance, today, { startOfYear = null, paidThis
     const spi = scheduledPayment(loan.original, loan.rate, months);
     scheduled = {
       pi: spi,
-      escrowGuess: round2(loan.payment - spi),
+      escrowGuess: round2((loan.required || loan.payment) - spi),
       payoffMonth: loan.firstPayment ? addMonths(loan.firstPayment, months - 1) : null,
     };
   }
 
+  // The required payment (from the statement) splits what you pay into the
+  // minimum and extra principal, and gives the payoff at the minimum to
+  // compare with.
+  let required = null;
+  if (loan.required > 0) {
+    const rpi = round2(loan.required - (Number(loan.escrow) || 0));
+    const extra = round2(pi - rpi);
+    required = { payment: round2(loan.required), pi: rpi, extra };
+    if (extra < -0.005) warnings.push(`You pay ${money(-extra)} less than the required payment (${money(loan.required)}).`);
+    else if (extra > 0.005) {
+      const min = amortize(balance, loan.rate, rpi, { startMonth: next });
+      required.minimum = { payoffMonth: min.lastMonth, monthsLeft: min.months, interestLeft: min.totalInterest, never: min.never };
+      if (!min.never && !base.never) {
+        required.monthsSooner = min.months - base.months;
+        required.interestSaved = round2(min.totalInterest - base.totalInterest);
+      }
+    }
+  }
+  const extraNow = required ? Math.max(0, required.extra) : 0;
+
   return {
     pi, escrow: round2(Number(loan.escrow) || 0), payment: round2(Number(loan.payment)), rate: Number(loan.rate),
-    nextPayment: { month: next, interest: nextInterest, principal: round2(Math.max(0, pi - nextInterest)) },
+    nextPayment: { month: next, interest: nextInterest, principal: round2(Math.max(0, pi - extraNow - nextInterest)), extra: round2(extraNow) },
+    required,
     payoffMonth: base.lastMonth, monthsLeft: base.months, interestLeft: base.totalInterest, never: base.never,
     years: byYear(base.rows),
     ytd, scheduled, warnings,
@@ -149,12 +172,13 @@ export function validateLoan(input) {
   const n = (v) => (v === '' || v == null ? null : Number(String(v).replace(/[$,%\s]/g, '')));
   const loan = {
     rate: n(input.rate), payment: n(input.payment), escrow: n(input.escrow) ?? 0,
-    original: n(input.original), termYears: n(input.termYears),
+    required: n(input.required), original: n(input.original), termYears: n(input.termYears),
     firstPayment: /^\d{4}-\d{2}$/.test(input.firstPayment || '') ? input.firstPayment : null,
   };
   if (loan.rate == null || !(loan.rate >= 0 && loan.rate < 40)) throw new Error('Enter the interest rate as a percent, like 6.125.');
   if (loan.payment == null || !(loan.payment > 0)) throw new Error('Enter the monthly payment.');
   if (!(loan.escrow >= 0) || loan.escrow >= loan.payment) throw new Error('Escrow must be less than the whole payment.');
+  if (loan.required != null && !(loan.required > loan.escrow)) throw new Error('The required payment must be more than the escrow.');
   if (loan.original != null && !(loan.original > 0)) throw new Error('The amount borrowed must be more than 0.');
   if (loan.termYears != null && !(loan.termYears > 0 && loan.termYears <= 50)) throw new Error('The term is in years, like 30.');
   return loan;

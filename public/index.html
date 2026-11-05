@@ -148,9 +148,11 @@
       <p class="muted small">The balance comes from your lender. These are on your statement or your lender's website.</p>
       <div class="form-grid">
         <label>Interest rate (%) <input id="lRate" inputmode="decimal" placeholder="6.125" required></label>
-        <label>Monthly payment, all of it ($) <input id="lPayment" inputmode="decimal" placeholder="2400" required></label>
-        <label id="lEscrowWrap">Escrow in that payment ($) <input id="lEscrow" inputmode="decimal" placeholder="Taxes, insurance, PMI"></label>
+        <label>What you pay each month ($) <input id="lPayment" inputmode="decimal" placeholder="2400" required></label>
+        <label>Required payment ($) <input id="lRequired" inputmode="decimal" placeholder="Amount due"></label>
+        <label id="lEscrowWrap">Escrow in it ($) <input id="lEscrow" inputmode="decimal" placeholder="Taxes, insurance, PMI"></label>
       </div>
+      <p class="muted small">The required payment is the amount due on your statement. If you pay more, the rest goes to principal as extra, and FinTrack shows what that saves. Leave it empty if you pay exactly what's due.</p>
       <p class="muted small" id="lEscrowNote">Escrow is the part of the payment for property taxes, homeowner's insurance and any PMI. It doesn't pay down the loan. Your statement shows it as "escrow".</p>
       <fieldset>
         <legend>Optional: the original loan</legend>

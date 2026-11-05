@@ -514,7 +514,10 @@ function renderLoans() {
 
 function drawLoan(card, l) {
   const w = whatIf[l.id] || { extra: 0, lump: 0 };
-  const total = l.nextPayment.interest + l.nextPayment.principal || 1;
+  const np = l.nextPayment;
+  const total = np.interest + np.principal + (np.extra || 0) || 1;
+  const req = l.required;
+  const extra = req && req.extra > 0.005 ? req.extra : 0;
   const maxExtra = Math.max(2000, Math.ceil(l.payment / 500) * 500);
   card.innerHTML = `
     <div class="card-head">
@@ -524,19 +527,22 @@ function drawLoan(card, l) {
     ${l.warnings.map((x) => `<div class="notice loan-warn">${esc(x)}</div>`).join('')}
     <div class="loan-tiles">
       <div class="tile"><div class="label">Left to pay</div><div class="v">${fmt(l.balance)}</div><div class="s">${l.loan.original ? `${Math.round((1 - l.balance / l.loan.original) * 100)}% of ${fmt(l.loan.original)} paid off` : 'Principal, from your lender'}</div></div>
-      <div class="tile"><div class="label">Monthly payment</div><div class="v">${fmtCents(l.payment)}</div><div class="s">${l.escrow > 0 ? `${fmtCents(l.pi)} loan + ${fmtCents(l.escrow)} escrow` : 'All of it goes to the loan'}</div></div>
-      <div class="tile"><div class="label">Next payment (${monthLabel(l.nextPayment.month)})</div>
-        <div class="split" role="img" aria-label="Interest ${fmtCents(l.nextPayment.interest)}, principal ${fmtCents(l.nextPayment.principal)}">
-          <span style="width:${(l.nextPayment.interest / total) * 100}%;background:var(--s2)"></span><span style="width:${(l.nextPayment.principal / total) * 100}%;background:var(--s1)"></span></div>
-        <div class="split-key"><span><i style="background:var(--s2)"></i>Interest ${fmtCents(l.nextPayment.interest)}</span><span><i style="background:var(--s1)"></i>Principal ${fmtCents(l.nextPayment.principal)}</span></div></div>
+      <div class="tile"><div class="label">Monthly payment</div><div class="v">${fmtCents(l.payment)}</div><div class="s">${
+        extra ? `${fmtCents(req.payment)} due + ${fmtCents(extra)} extra<br>Due: ${fmtCents(req.pi)} loan${l.escrow > 0 ? ` + ${fmtCents(l.escrow)} escrow` : ''}`
+        : l.escrow > 0 ? `${fmtCents(l.pi)} loan + ${fmtCents(l.escrow)} escrow` : 'All of it goes to the loan'}</div></div>
+      <div class="tile"><div class="label">Next payment (${monthLabel(np.month)})</div>
+        <div class="split" role="img" aria-label="Interest ${fmtCents(np.interest)}, principal ${fmtCents(np.principal)}${np.extra ? `, extra principal ${fmtCents(np.extra)}` : ''}">
+          <span style="width:${(np.interest / total) * 100}%;background:var(--s2)"></span><span style="width:${(np.principal / total) * 100}%;background:var(--s1)"></span>${np.extra ? `<span style="width:${(np.extra / total) * 100}%;background:var(--s3)"></span>` : ''}</div>
+        <div class="split-key"><span><i style="background:var(--s2)"></i>Interest ${fmtCents(np.interest)}</span><span><i style="background:var(--s1)"></i>Principal ${fmtCents(np.principal)}</span>${np.extra ? `<span><i style="background:var(--s3)"></i>Extra ${fmtCents(np.extra)}</span>` : ''}</div></div>
       <div class="tile"><div class="label">Paid off</div><div class="v">${l.never ? 'Never' : monthLabel(l.payoffMonth)}</div><div class="s">${l.never ? 'The payment is too small' : `${span(l.monthsLeft)} left · ${fmt(l.interestLeft)} interest to go`}</div></div>
     </div>
+    ${extra && req.minimum && !req.minimum.never && req.monthsSooner != null ? `<p class="small">Your extra ${fmtCents(extra)} a month pays it off <b class="up">${span(req.monthsSooner)} sooner</b> than the required payment alone (${monthLabel(req.minimum.payoffMonth)}), saving <b class="up">${fmt(req.interestSaved)}</b> in interest.</p>` : ''}
     ${l.scheduled?.payoffMonth ? `<p class="small muted">Original schedule: ${fmtCents(l.scheduled.pi)} principal and interest, paid off ${monthLabel(l.scheduled.payoffMonth)}.${!l.never && l.payoffMonth < l.scheduled.payoffMonth ? ` You're ahead of it by ${span(monthsBetween(l.payoffMonth, l.scheduled.payoffMonth))}.` : ''}</p>` : ''}
 
     <div class="whatif">
       <h3>What if you paid more?</h3>
       <div class="whatif-controls">
-        <label for="x-${esc(l.id)}">Extra each month</label><span></span>
+        <label for="x-${esc(l.id)}">More than your ${fmtCents(l.payment)} each month</label><span></span>
         <input type="range" id="x-${esc(l.id)}" class="extra-range" min="0" max="${maxExtra}" step="25" value="${w.extra}">
         <input type="number" class="extra-num" min="0" step="25" value="${w.extra}" aria-label="Extra each month in dollars">
         <label>One-time payment now</label>
@@ -644,6 +650,7 @@ function openLoan(a) {
   $('loanTitle').textContent = `${a.name}: loan details`;
   $('lRate').value = ln.rate ?? '';
   $('lPayment').value = ln.payment ?? '';
+  $('lRequired').value = ln.required ?? '';
   $('lEscrow').value = ln.escrow ?? '';
   // Only a mortgage has escrow (taxes and insurance paid through the lender).
   const hasEscrow = a.category === 'mortgage';
@@ -661,7 +668,8 @@ function openLoan(a) {
 // With the original loan filled in, say what the escrow probably is.
 function loanHelp() {
   const num = (id) => Number(String($(id).value).replace(/[$,%\s]/g, ''));
-  const rate = num('lRate'), original = num('lOriginal'), term = num('lTerm'), payment = num('lPayment');
+  // The escrow is in the required payment; anything over it is extra principal, not escrow.
+  const rate = num('lRate'), original = num('lOriginal'), term = num('lTerm'), payment = num('lRequired') || num('lPayment');
   const help = $('lHelp');
   const hasEscrow = loanAccount?.category === 'mortgage';
   if (!(rate >= 0 && original > 0 && term > 0)) { help.innerHTML = `<span class="muted">With these, FinTrack shows your original payoff date${hasEscrow ? ', and can work out the escrow from your payment' : ''}.</span>`; return; }
@@ -685,7 +693,7 @@ $('lRemove').addEventListener('click', async () => {
 });
 $('loanForm').addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  const loan = { rate: $('lRate').value, payment: $('lPayment').value, escrow: loanAccount.category === 'mortgage' ? $('lEscrow').value : 0, original: $('lOriginal').value, termYears: $('lTerm').value, firstPayment: $('lFirst').value };
+  const loan = { rate: $('lRate').value, payment: $('lPayment').value, required: $('lRequired').value, escrow: loanAccount.category === 'mortgage' ? $('lEscrow').value : 0, original: $('lOriginal').value, termYears: $('lTerm').value, firstPayment: $('lFirst').value };
   try {
     await api(`/api/accounts/${encodeURIComponent(loanAccount.id)}/loan`, { method: 'PUT', body: JSON.stringify({ loan }) });
     $('loanDlg').close();

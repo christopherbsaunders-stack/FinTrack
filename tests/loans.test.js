@@ -87,7 +87,33 @@ test('months and input checks', () => {
   assert.equal(addMonths('2026-11', 2), '2027-01');
   assert.equal(addMonths('2027-01', -1), '2026-12');
   assert.deepEqual(validateLoan({ rate: '6.125%', payment: '$2,400', escrow: '650', original: '', termYears: '30', firstPayment: '2021-06' }),
-    { rate: 6.125, payment: 2400, escrow: 650, original: null, termYears: 30, firstPayment: '2021-06' });
+    { rate: 6.125, payment: 2400, escrow: 650, required: null, original: null, termYears: 30, firstPayment: '2021-06' });
   assert.throws(() => validateLoan({ rate: '', payment: 2400 }), /rate/);
   assert.throws(() => validateLoan({ rate: 6, payment: 2400, escrow: 2500 }), /Escrow/);
+});
+
+test('a required payment splits what you pay into the minimum and extra principal', () => {
+  const balance = 200000, rate = 3, escrow = 400;
+  const r = rate / 1200;
+  const requiredPi = scheduledPayment(balance, rate, 120);           // a loan with 10 years left
+  const loan = { rate, payment: 2500, escrow, required: Math.round((requiredPi + escrow) * 100) / 100 };
+  const s = loanSummary(loan, balance, '2026-11-20');
+  const interest = Math.round(balance * r * 100) / 100;
+  assert.equal(s.nextPayment.interest, interest);
+  assert.equal(s.nextPayment.principal, Math.round((requiredPi - interest) * 100) / 100);
+  assert.equal(s.nextPayment.extra, Math.round((2500 - loan.required) * 100) / 100);
+  assert.equal(s.required.pi, requiredPi);
+  assert.equal(s.required.minimum.monthsLeft, 120);
+  assert.ok(s.monthsLeft < 120);
+  assert.equal(s.required.monthsSooner, 120 - s.monthsLeft);
+  assert.ok(s.required.interestSaved > 0);
+  assert.deepEqual(s.warnings, []);
+
+  // Paying less than what's due is flagged; no required payment means no split.
+  assert.match(loanSummary({ ...loan, payment: 2000 }, balance, '2026-11-20').warnings[0], /less than the required payment/);
+  const plain = loanSummary({ rate, payment: 2500, escrow }, balance, '2026-11-20');
+  assert.equal(plain.required, null);
+  assert.equal(plain.nextPayment.extra, 0);
+  assert.equal(plain.nextPayment.principal, Math.round((2100 - interest) * 100) / 100);
+  assert.throws(() => validateLoan({ rate: 3, payment: 2500, escrow: 400, required: 300 }), /required payment must be more than the escrow/);
 });
