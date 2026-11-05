@@ -157,3 +157,21 @@ dialog input { width: 80px; }
   #syncStatus { display: none; }
 }
 .more { margin-top: 10px; }
+
+.row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+dialog.wide { max-width: 760px; }
+dialog fieldset { border: 1px solid var(--border); border-radius: 10px; margin: 14px 0 0; padding: 10px 14px 12px; min-width: 0; }
+dialog legend { font-weight: 600; font-size: 13px; padding: 0 4px; }
+dialog legend input { width: auto; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 14px; margin-top: 10px; }
+.form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
+.form-grid input, .form-grid select { width: 100%; }
+.fund-rows input { width: 100%; min-width: 70px; padding: 5px 8px; }
+.fund-rows td { padding: 4px 4px; border-bottom: 0; }
+.fund-rows td:first-child input { width: 80px; text-transform: uppercase; }
+.fund-rows .num input { text-align: right; }
+.fund-rows tfoot td { font-weight: 600; font-size: 12px; padding-top: 8px; }
+.form-error { color: var(--bad); margin-top: 12px; min-height: 1em; }
+.estimate { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.ok-note { color: var(--good); }
+input[type="file"] { padding: 4px 0; border: 0; background: transparent; max-width: 100%; }

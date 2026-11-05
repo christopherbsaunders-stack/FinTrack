@@ -15,6 +15,9 @@ export function emptyState() {
     accounts: {},         // id -> account (SimpleFIN and manual)
     snapshots: {},        // 'YYYY-MM-DD' -> { accountId: signed value }
     transactions: {},     // id -> transaction (with accountId)
+    prices: {},           // ticker -> { closes: { date: close }, events: [payouts, splits] }
+    priceErrors: [],
+    lastPriceSync: null,
     settings: { syncHours: 6 },
   };
 }

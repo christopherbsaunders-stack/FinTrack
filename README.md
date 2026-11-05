@@ -27,6 +27,14 @@ From then on FinTrack syncs on its own every 6 hours while it's running (change 
 
 **Fix categories once.** FinTrack guesses each account's type from its name (401(k) → Retirement, Robinhood → Investments, Toyota Financial → Car loan, ...). If a guess is wrong, pick the right one in the Accounts table and it sticks. Hide accounts you don't want counted.
 
+**A 401(k) SimpleFIN can't reach (like Paychex Flex).** Use **Add 401(k) by holdings**. Enter what each fund is worth (or how many shares you hold) as of a day's close, and how much goes in each paycheck and how it's split. FinTrack then:
+
+- looks up each fund's closing price every day (Yahoo Finance; it covers mutual funds) and works out the balance from your shares;
+- adds each paycheck's contribution on its own, as an estimate, at that day's price (for example: paid the last business day of the month, invested 3 business days later);
+- reinvests fund payouts (dividends and capital gains, which drop a fund's price), so the balance doesn't dip when a fund pays out.
+
+The account shows what's estimated ("Estimated since Nov 5: 1 paycheck ($1,715.86)"). To make it exact, download your transactions from Paychex Flex (Retirement → Transactions → Download) and use **Import transactions**: the real contributions, payouts and fees replace the estimates for the dates the file covers. Importing the same file twice doesn't count anything twice. A Paychex transactions file in the setup form fills in the funds, the contribution and the split for you. If you move money between funds, use **Edit holdings** and enter the new values.
+
 **Home and car values.** Use **Add home, car or other** and update the value now and then. The dashboard shows equity (value minus the loan).
 
 ## Where your data lives
@@ -67,6 +75,8 @@ src/simplefin.js   SimpleFIN client: claim a setup token, fetch accounts and tra
 src/sync.js        merge a fetch into the state; record today's value of every account
 src/classify.js    categories (asset or debt) and the guess from an account's name
 src/summary.js     totals, history, cash flow, holdings for the dashboard (pure, tested)
+src/prices.js      daily fund prices and payouts from Yahoo Finance
+src/priced.js      accounts valued from their holdings: paydays, estimates, Paychex CSV import
 src/store.js       the JSON state file
 src/server.js      HTTP server, JSON API, the sync timer
 src/demo.js        made-up data for npm run demo

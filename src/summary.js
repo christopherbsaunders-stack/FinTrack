@@ -11,8 +11,9 @@ const TRANSFER_CATEGORIES = new Set(['cash', 'creditCard', 'investments', 'retir
 const TRANSFER_WINDOW_DAYS = 4;
 
 export function computeSummary(state, now = new Date()) {
-  const accounts = Object.values(state.accounts).map((a) => ({
+  const accounts = Object.values(state.accounts).map(({ priced, ...a }) => ({
     ...a,
+    ...(priced ? { priced: { asOf: priced.asOf, coveredUntil: priced.coveredUntil, plan: priced.plan, positions: priced.positions, imported: priced.ledger.length } } : {}),
     name: a.displayName || a.name,
     value: signedValue(a.balance, a.category),
     kind: kindOf(a.category),
@@ -46,6 +47,9 @@ export function computeSummary(state, now = new Date()) {
     lastSync: state.lastSync,
     lastAttempt: state.lastAttempt,
     errors: state.lastErrors || [],
+    priceErrors: state.priceErrors || [],
+    lastPriceSync: state.lastPriceSync || null,
+    hasPriced: accounts.some((a) => a.source === 'priced'),
     syncHours: state.settings?.syncHours,
     totals: {
       netWorth, assets, liabilities,
@@ -170,14 +174,16 @@ function topHoldings(accounts) {
     for (const h of a.holdings || []) {
       const key = h.symbol || h.description;
       if (!key) continue;
-      const cur = map.get(key) || { symbol: h.symbol, description: h.description, value: 0, costBasis: 0, hasBasis: true };
+      const cur = map.get(key) || { symbol: h.symbol, description: h.description, value: 0, costBasis: 0, hasBasis: true, shares: 0, price: null };
       cur.value += h.value;
+      cur.shares += Number(h.shares) || 0;
+      if (h.price) cur.price = h.price;
       if (h.costBasis == null) cur.hasBasis = false; else cur.costBasis += h.costBasis;
       map.set(key, cur);
     }
   }
   return [...map.values()].sort((a, b) => b.value - a.value).slice(0, 25)
-    .map((h) => ({ ...h, value: r2(h.value), gain: h.hasBasis ? r2(h.value - h.costBasis) : null }));
+    .map((h) => ({ ...h, value: r2(h.value), shares: Math.round(h.shares * 1e4) / 1e4, gain: h.hasBasis ? r2(h.value - h.costBasis) : null }));
 }
 
 function sum(list) { return r2(list.reduce((s, v) => s + v, 0)); }

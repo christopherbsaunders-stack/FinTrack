@@ -58,10 +58,11 @@ function render() {
   const t = data.totals;
   $('demoBadge').hidden = !data.demo;
   $('setup').hidden = data.connected || data.demo;
-  $('syncBtn').hidden = !data.connected;
-  $('syncStatus').textContent = data.demo ? 'Made-up accounts' : data.connected ? `Synced ${ago(data.lastSync)}` : 'Not connected';
+  $('syncBtn').hidden = !data.connected && !data.hasPriced;
+  $('syncStatus').textContent = data.demo ? 'Made-up accounts' : data.connected ? `Synced ${ago(data.lastSync)}` : data.hasPriced ? `Prices ${ago(data.lastPriceSync)}` : 'Not connected';
 
-  $('notices').innerHTML = (data.errors || []).map((e) => `<div class="notice"><b>SimpleFIN:</b> ${esc(e)}</div>`).join('');
+  $('notices').innerHTML = (data.errors || []).map((e) => `<div class="notice"><b>SimpleFIN:</b> ${esc(e)}</div>`).join('')
+    + (data.priceErrors || []).map((e) => `<div class="notice"><b>Prices:</b> ${esc(e)} The balance uses the last price found.</div>`).join('');
 
   $('netWorth').textContent = fmt(t.netWorth);
   const parts = [];
@@ -201,7 +202,7 @@ function renderCashFlow() {
   const months = data.cashFlow;
   $('cfLegend').innerHTML = months.length ? '<span><i class="sq" style="background:var(--s1)"></i>Money in</span><span><i class="sq" style="background:var(--s2)"></i>Money out</span>' : '';
   el.innerHTML = '';
-  if (!months.length) { el.innerHTML = '<div class="empty">Transactions appear after the first sync.</div>'; return; }
+  if (!months.length || !data.transactions.length) { $('cfLegend').innerHTML = ''; el.innerHTML = '<div class="empty">Bank and card transactions show up here after the first SimpleFIN sync.</div>'; return; }
   const W = Math.max(320, el.clientWidth || 800), H = 230, L = 56, R = 8, T = 10, B = 28;
   const max = Math.max(...months.flatMap((m) => [m.in, m.out]), 1);
   const ticks = niceTicks(0, max);
@@ -259,28 +260,50 @@ function renderAccounts() {
       html += `<tr class="group"><td colspan="2">${esc(label)}</td><td class="num">${fmt(total)}</td><td colspan="3"></td></tr>`;
     }
     const manual = a.source === 'manual';
+    const priced = a.source === 'priced';
     html += `<tr class="${a.hidden ? 'hidden-row' : ''}" data-id="${esc(a.id)}">
-      <td>${esc(a.name)}<span class="sub">${esc(a.org)}</span></td>
+      <td>${esc(a.name)}<span class="sub">${esc(a.org)}${priced ? ` · ${a.holdings.length} funds, priced daily` : ''}</span>${priced ? estimateNote(a) : ''}</td>
       <td><select data-act="category" aria-label="Category for ${esc(a.name)}">${categoryOptions(a.category)}</select></td>
       <td class="num">${fmtCents(a.value)}</td>
       <td class="num ${cls(a.change30)}">${a.change30 == null ? '<span class="muted">–</span>' : signed(a.change30)}</td>
-      <td class="small muted">${manual ? 'You set it' : ago(a.balanceDate)}</td>
+      <td class="small muted">${manual ? 'You set it' : priced ? (a.status?.priceDate ? `Close ${shortDate(a.status.priceDate)}` : 'No price yet') : ago(a.balanceDate)}</td>
       <td class="num">
         ${manual ? '<button class="linkish" data-act="value">Update value</button> · ' : ''}
+        ${priced ? '<button class="linkish" data-act="import">Import transactions</button> · <button class="linkish" data-act="editPriced">Edit holdings</button> · ' : ''}
         <button class="linkish" data-act="rename">Rename</button> ·
         <button class="linkish" data-act="hide">${a.hidden ? 'Show' : 'Hide'}</button>
-        ${manual ? ' · <button class="linkish" data-act="delete">Delete</button>' : ''}
+        ${manual || priced ? ' · <button class="linkish" data-act="delete">Delete</button>' : ''}
       </td></tr>`;
   }
   $('accounts').innerHTML = html + '</tbody>';
+}
+
+// What part of a priced account is estimated, and how to make it exact.
+function estimateNote(a) {
+  const st = a.status || {};
+  const est = st.estimates || [];
+  const bits = [];
+  const paid = est.filter((e) => e.kind === 'contribution');
+  const payouts = est.filter((e) => e.kind !== 'contribution');
+  if (paid.length) {
+    const days = [...new Set(paid.map((e) => e.date))];
+    bits.push(`${days.length} paycheck${days.length > 1 ? 's' : ''} (${fmt(paid.reduce((s, e) => s + e.amount, 0))})`);
+  }
+  if (payouts.length) bits.push(`${payouts.length} reinvested payout${payouts.length > 1 ? 's' : ''} (${fmt(payouts.reduce((s, e) => s + e.amount, 0))})`);
+  if ((st.waiting || []).length) bits.push(`a paycheck on ${shortDate(st.waiting[0].date)} waiting for that day's price`);
+  if (!bits.length) return `<span class="estimate">Exact through ${shortDate(st.estimatedSince || a.priced.asOf)}</span>`;
+  return `<span class="estimate">Estimated since ${shortDate(st.estimatedSince)}: ${bits.join(', ')}</span>`;
 }
 
 function renderHoldings() {
   const h = data.holdings;
   $('holdingsCard').hidden = !h.length;
   if (!h.length) return;
-  $('holdings').innerHTML = '<thead><tr><th>Holding</th><th class="num">Value</th><th class="num">Gain</th></tr></thead><tbody>' +
-    h.map((x) => `<tr><td><b>${esc(x.symbol || '')}</b> <span class="muted">${esc(x.description)}</span></td><td class="num">${fmt(x.value)}</td>
+  const share = new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 });
+  $('holdings').innerHTML = '<thead><tr><th>Holding</th><th class="num">Shares</th><th class="num">Price</th><th class="num">Value</th><th class="num">Gain</th></tr></thead><tbody>' +
+    h.map((x) => `<tr><td><b>${esc(x.symbol || '')}</b> <span class="muted">${esc(x.description)}</span></td>
+      <td class="num">${x.shares ? share.format(x.shares) : '<span class="muted">–</span>'}</td>
+      <td class="num">${x.price ? fmtCents(x.price) : '<span class="muted">–</span>'}</td><td class="num">${fmt(x.value)}</td>
       <td class="num ${cls(x.gain)}">${x.gain == null ? '<span class="muted">–</span>' : signed(x.gain)}</td></tr>`).join('') + '</tbody>';
 }
 
@@ -375,6 +398,8 @@ $('accounts').addEventListener('click', (ev) => {
     const v = prompt(`New value for ${a.name}`, Math.abs(a.balance));
     if (v !== null && v.trim() !== '') act(() => patch(path, { balance: Number(v.replace(/[$,\s]/g, '')) }));
   }
+  if (b.dataset.act === 'editPriced') openPriced(a);
+  if (b.dataset.act === 'import') { importTarget = a; $('importFile').value = ''; $('importFile').click(); }
   if (b.dataset.act === 'delete' && confirm(`Delete ${a.name} and its history?`)) act(() => api(path, { method: 'DELETE' }));
 });
 $('showHidden').addEventListener('change', renderAccounts);
@@ -387,6 +412,154 @@ $('settingsForm').addEventListener('submit', (ev) => {
 });
 $('disconnectBtn').addEventListener('click', () => {
   if (confirm('Disconnect SimpleFIN? Syncing stops until you paste a new setup token.')) { $('settings').close(); act(() => post('/api/disconnect')); }
+});
+
+// ---------- 401(k) by holdings ----------
+
+let editing = null;      // the priced account being edited, or null for a new one
+let importTarget = null;
+let pendingCsv = null;   // { csv, filename } picked in the form, imported on save
+
+function prevBusinessDay() {
+  const d = new Date();
+  do d.setDate(d.getDate() - 1); while ([0, 6].includes(d.getDay()));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function addRow(r = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input class="t" placeholder="MDFGX" value="${esc(r.ticker || '')}" aria-label="Ticker"></td>
+    <td><input class="n" placeholder="Fund name (optional)" value="${esc(r.name || '')}" aria-label="Fund name"></td>
+    <td class="num"><input class="a" type="number" step="any" min="0" value="${r.amount ?? ''}" aria-label="Value or shares"></td>
+    <td class="num"><input class="p" type="number" step="0.1" min="0" max="100" value="${r.pct ?? ''}" aria-label="Percent of future contributions"></td>
+    <td><button type="button" class="linkish" data-rm aria-label="Remove fund">Remove</button></td>`;
+  $('pRows').appendChild(tr);
+}
+
+function formRows() {
+  return [...$('pRows').querySelectorAll('tr')].map((tr) => ({
+    ticker: tr.querySelector('.t').value.trim().toUpperCase(),
+    name: tr.querySelector('.n').value.trim(),
+    amount: tr.querySelector('.a').value,
+    pct: Number(tr.querySelector('.p').value) || 0,
+  })).filter((r) => r.ticker);
+}
+
+function updateTotals() {
+  const rows = formRows();
+  const mode = $('pMode').value;
+  $('pAmountHead').textContent = mode === 'shares' ? 'Shares' : 'Value';
+  $('pTotal').textContent = mode === 'shares' ? '' : `Total ${fmtCents(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0))}`;
+  const pct = rows.reduce((s, r) => s + r.pct, 0);
+  $('pPctTotal').innerHTML = `<span class="${Math.abs(pct - 100) < 0.5 || !$('pPlanOn').checked ? '' : 'down'}">${Math.round(pct * 10) / 10}%</span>`;
+  const every = $('pEvery').value;
+  $('pDayWrap').hidden = every !== 'monthDay';
+  $('pAnchorWrap').hidden = !['2weeks', 'week'].includes(every);
+  $('pPlan').querySelectorAll('input, select').forEach((el) => { el.disabled = !$('pPlanOn').checked; });
+}
+
+function openPriced(a = null) {
+  editing = a;
+  pendingCsv = null;
+  $('pricedForm').reset();
+  $('pError').textContent = '';
+  $('pCsvNote').textContent = '';
+  $('pRows').innerHTML = '';
+  $('pricedTitle').textContent = a ? `Edit ${a.name}` : 'Add a 401(k) by holdings';
+  if (a) {
+    const pr = a.priced;
+    $('pName').value = a.name; $('pOrg').value = a.org;
+    // Editing starts from today's numbers: the current shares, as of the last close.
+    $('pAsOf').value = a.status?.priceDate || pr.asOf;
+    $('pMode').value = 'shares';
+    for (const h of a.holdings) addRow({ ticker: h.symbol, name: h.description, amount: h.shares, pct: pr.plan.allocation?.[h.symbol] ?? '' });
+    $('pPlanOn').checked = pr.plan.enabled;
+    $('pAmount').value = pr.plan.amount || '';
+    const sc = pr.plan.schedule || {};
+    $('pEvery').value = sc.every === 'month' ? (sc.day === 'lastBusiness' ? 'lastBusiness' : 'monthDay') : sc.every || 'lastBusiness';
+    if (sc.every === 'month' && sc.day !== 'lastBusiness') $('pDay').value = sc.day;
+    if (sc.anchor) $('pAnchor').value = sc.anchor;
+    $('pLag').value = sc.lag ?? 0;
+  } else {
+    $('pAsOf').value = prevBusinessDay();
+    for (let i = 0; i < 3; i++) addRow();
+  }
+  updateTotals();
+  $('pricedDlg').showModal();
+}
+
+$('addPricedBtn').addEventListener('click', () => openPriced());
+$('pCancel').addEventListener('click', () => $('pricedDlg').close());
+$('pAddRow').addEventListener('click', () => { addRow(); updateTotals(); });
+$('pRows').addEventListener('click', (ev) => { if (ev.target.closest('[data-rm]')) { ev.target.closest('tr').remove(); updateTotals(); } });
+$('pricedForm').addEventListener('input', updateTotals);
+$('pricedForm').addEventListener('change', updateTotals);
+
+$('pCsv').addEventListener('change', async () => {
+  const f = $('pCsv').files[0];
+  if (!f) return;
+  try {
+    const csv = await f.text();
+    const r = await post('/api/priced/parse-csv', { csv, filename: f.name });
+    pendingCsv = { csv, filename: f.name };
+    const s = r.suggestion;
+    if (!s) { $('pCsvNote').textContent = `Read ${r.rows.length} transactions; none were contributions, so nothing to fill in.`; return; }
+    const keep = Object.fromEntries(formRows().map((x) => [x.ticker, x]));
+    $('pRows').innerHTML = '';
+    for (const [t, pct] of Object.entries(s.allocation)) addRow({ ticker: t, name: s.names[t] || keep[t]?.name || '', amount: keep[t]?.amount ?? '', pct });
+    $('pAmount').value = s.amount;
+    $('pPlanOn').checked = true;
+    updateTotals();
+    $('pCsvNote').innerHTML = `<span class="ok-note">Filled in ${Object.keys(s.allocation).length} funds and a ${fmtCents(s.amount)} contribution from ${shortDate(s.date)}.</span> Now enter what each fund is worth. The file's transactions are saved too.`;
+  } catch (err) {
+    pendingCsv = null;
+    $('pCsvNote').innerHTML = `<span class="down">${esc(err.message)}</span>`;
+  }
+});
+
+$('pricedForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const rows = formRows();
+  const every = $('pEvery').value;
+  const body = {
+    name: $('pName').value, org: $('pOrg').value, category: 'retirement',
+    asOf: $('pAsOf').value, mode: $('pMode').value,
+    rows: rows.map((r) => ({ ticker: r.ticker, name: r.name, amount: r.amount })),
+    plan: {
+      enabled: $('pPlanOn').checked,
+      amount: Number($('pAmount').value) || 0,
+      allocation: Object.fromEntries(rows.filter((r) => r.pct > 0).map((r) => [r.ticker, r.pct])),
+      schedule: every === 'lastBusiness' ? { every: 'month', day: 'lastBusiness', lag: Number($('pLag').value) }
+        : every === 'monthDay' ? { every: 'month', day: Number($('pDay').value), lag: Number($('pLag').value) }
+        : { every, anchor: $('pAnchor').value, lag: Number($('pLag').value) },
+    },
+    ...(pendingCsv && !editing ? pendingCsv : {}),
+  };
+  const btn = $('pSave');
+  btn.disabled = true; btn.textContent = 'Looking up prices…';
+  $('pError').textContent = '';
+  try {
+    if (editing) {
+      await api(`/api/priced/${encodeURIComponent(editing.id)}`, { method: 'PUT', body: JSON.stringify(body) });
+      if (pendingCsv) await post(`/api/priced/${encodeURIComponent(editing.id)}/import`, pendingCsv);
+    } else await post('/api/priced', body);
+    $('pricedDlg').close();
+    await load();
+  } catch (err) {
+    $('pError').textContent = err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save';
+  }
+});
+
+$('importFile').addEventListener('change', async () => {
+  const f = $('importFile').files[0];
+  if (!f || !importTarget) return;
+  try {
+    const r = await post(`/api/priced/${encodeURIComponent(importTarget.id)}/import`, { csv: await f.text(), filename: f.name });
+    alert(`Added ${r.added} transaction${r.added === 1 ? '' : 's'}${r.alreadyCounted ? ` (${r.alreadyCounted} dated ${shortDate(importTarget.priced.asOf)} or earlier were already in your share counts)` : ''}. Exact through ${shortDate(r.coveredUntil)}.`);
+    await load();
+  } catch (err) { alert(err.message); }
 });
 
 let resizeTimer;

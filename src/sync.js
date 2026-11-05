@@ -4,11 +4,31 @@
 import { fetchAccounts, MAX_RANGE_DAYS } from './simplefin.js';
 import { guessCategory, signedValue } from './classify.js';
 import { dayKey } from './store.js';
+import { refreshPrices } from './prices.js';
+import { valuePriced } from './priced.js';
 
 const DAY = 86400000;
 const FIRST_SYNC_DAYS = 89;    // fetched in MAX_RANGE_DAYS pieces
 const OVERLAP_DAYS = 10;       // re-read recent days: pending transactions settle late
 const KEEP_TRANSACTIONS_DAYS = 3 * 365;
+
+// Everything a scheduled sync does: SimpleFIN (when connected), then fund
+// prices (when there are priced accounts), then today's values.
+export async function syncAll(state, { now = new Date(), fetchImpl } = {}) {
+  const out = { accounts: 0, errors: [], priceErrors: [] };
+  if (state.accessUrl) {
+    try { Object.assign(out, await syncNow(state, { now, fetchImpl })); } catch (err) { out.errors = [err.message]; }
+  }
+  const tickers = pricedTickers(state);
+  if (tickers.length) {
+    out.priceErrors = await refreshPrices(state, tickers, { now, fetchImpl });
+    state.priceErrors = out.priceErrors;
+    state.lastPriceSync = now.toISOString();
+  }
+  state.lastAttempt = now.toISOString();
+  revaluePriced(state, now);
+  return out;
+}
 
 export async function syncNow(state, { now = new Date(), fetchImpl } = {}) {
   if (!state.accessUrl) throw new Error('Not connected: add a SimpleFIN setup token first.');
@@ -74,6 +94,38 @@ export function applyAccountSet(state, { accounts }, now = new Date()) {
     }
   }
   pruneTransactions(state, now);
+  recordSnapshot(state, now);
+}
+
+export function pricedTickers(state) {
+  const set = new Set();
+  for (const a of Object.values(state.accounts)) {
+    if (a.source !== 'priced') continue;
+    for (const p of a.priced.positions) set.add(p.ticker);
+    for (const t of Object.keys(a.priced.plan?.allocation || {})) set.add(t);
+  }
+  return [...set].sort();
+}
+
+// Value every priced account from its shares and the latest prices, fill in
+// its past days since asOf (from the price history), and record today.
+export function revaluePriced(state, now = new Date()) {
+  const today = dayKey(now);
+  const firstDay = Object.keys(state.snapshots).sort()[0] || today;
+  for (const a of Object.values(state.accounts)) {
+    if (a.source !== 'priced') continue;
+    const v = valuePriced(a.priced, state.prices || {}, today);
+    a.balance = v.value;
+    a.holdings = v.holdings;
+    a.balanceDate = v.priceDate ? `${v.priceDate}T21:00:00.000Z` : a.balanceDate;
+    a.status = { estimates: v.estimates, estimatedSince: v.estimatedSince, waiting: v.waiting, missing: v.missing, priceDate: v.priceDate };
+    for (const p of v.series) {
+      // Only from the first day anything was recorded: earlier, the other
+      // accounts have no values and net worth would read as just this one.
+      if (p.date < firstDay || p.date >= today) continue;
+      (state.snapshots[p.date] ||= {})[a.id] = round2(signedValue(p.value, a.category));
+    }
+  }
   recordSnapshot(state, now);
 }
 

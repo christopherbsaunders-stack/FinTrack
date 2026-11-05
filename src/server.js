@@ -1,5 +1,5 @@
 // FinTrack server: serves the dashboard and a small JSON API, and syncs with
-// SimpleFIN on a timer. No dependencies; Node 20+.
+// SimpleFIN and refreshes fund prices on a timer. No dependencies; Node 20+.
 //
 //   node src/server.js           your data, in data/state.json
 //   node src/server.js --demo    made-up data, nothing saved
@@ -11,7 +11,9 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { loadState, saveState } from './store.js';
 import { claimAccessUrl } from './simplefin.js';
-import { syncNow, recordSnapshot } from './sync.js';
+import { syncAll, recordSnapshot, revaluePriced, pricedTickers } from './sync.js';
+import { refreshPrices } from './prices.js';
+import { parsePaychexCsv, sharesFromValue } from './priced.js';
 import { computeSummary } from './summary.js';
 import { CATEGORIES } from './classify.js';
 import { demoState } from './demo.js';
@@ -35,8 +37,12 @@ async function runSync(reason) {
   if (syncing) return syncing;
   syncing = (async () => {
     try {
-      const r = await syncNow(state);
-      console.log(`[sync] ${reason}: ${r.accounts} accounts${r.errors.length ? `, ${r.errors.length} notice(s)` : ''}`);
+      const r = await syncAll(state);
+      const parts = [];
+      if (state.accessUrl) parts.push(`${r.accounts} accounts`);
+      if (pricedTickers(state).length) parts.push(`${pricedTickers(state).length} fund prices`);
+      console.log(`[sync] ${reason}: ${parts.join(', ') || 'nothing to sync'}`);
+      for (const e of [...r.errors, ...r.priceErrors]) console.error(`[sync]   ${e}`);
       return r;
     } catch (err) {
       console.error(`[sync] ${reason} failed: ${err.message}`);
@@ -50,7 +56,7 @@ async function runSync(reason) {
 }
 
 function syncDue() {
-  if (DEMO || !state.accessUrl) return false;
+  if (DEMO || (!state.accessUrl && !pricedTickers(state).length)) return false;
   const last = state.lastAttempt ? new Date(state.lastAttempt).getTime() : 0;
   return Date.now() - last >= (state.settings.syncHours || 6) * 3600000;
 }
@@ -66,7 +72,7 @@ function send(res, status, body, type = 'application/json; charset=utf-8') {
 
 async function readJson(req) {
   let raw = '';
-  for await (const chunk of req) { raw += chunk; if (raw.length > 1e6) throw httpError(413, 'Request too large.'); }
+  for await (const chunk of req) { raw += chunk; if (raw.length > 5e6) throw httpError(413, 'Request too large.'); }
   try { return raw ? JSON.parse(raw) : {}; } catch { throw httpError(400, 'Body is not valid JSON.'); }
 }
 
@@ -108,8 +114,50 @@ const routes = [
 
   ['POST', /^\/api\/sync$/, async () => {
     if (DEMO) throw httpError(400, 'The demo has nothing to sync.');
-    await runSync('manual');
+    return runSync('manual');
+  }],
+
+  // ----- accounts valued from their holdings (a 401(k) no aggregator reaches) -----
+
+  ['POST', /^\/api\/priced\/parse-csv$/, async (req) => {
+    const { csv, filename } = await readJson(req);
+    try { return parsePaychexCsv(csv, filename); } catch (err) { throw httpError(400, err.message); }
+  }],
+
+  ['POST', /^\/api\/priced$/, async (req) => {
+    const body = await readJson(req);
+    const id = `priced-${randomUUID()}`;
+    const priced = await pricedFromForm(body, null);
+    const now = new Date().toISOString();
+    state.accounts[id] = {
+      id, name: cleanName(body.name, '401(k)'), org: cleanName(body.org, 'Manual'), currency: 'USD', balance: 0, available: null,
+      balanceDate: now, holdings: [], source: 'priced', category: CATEGORIES[body.category] ? body.category : 'retirement',
+      categoryOverride: null, displayName: null, hidden: false, firstSeen: now, lastSeen: now, priced,
+    };
+    if (body.csv) importCsv(state.accounts[id], body.csv, body.filename);
+    revaluePriced(state);
+    persist();
+    return { ok: true, id };
+  }],
+
+  ['PUT', /^\/api\/priced\/([^/]+)$/, async (req, [, rawId]) => {
+    const a = pricedAccount(rawId);
+    const body = await readJson(req);
+    a.priced = await pricedFromForm(body, a.priced);
+    if (body.name) a.name = cleanName(body.name, a.name);
+    if (body.org) a.org = cleanName(body.org, a.org);
+    revaluePriced(state);
+    persist();
     return { ok: true };
+  }],
+
+  ['POST', /^\/api\/priced\/([^/]+)\/import$/, async (req, [, rawId]) => {
+    const a = pricedAccount(rawId);
+    const { csv, filename } = await readJson(req);
+    const r = importCsv(a, csv, filename);
+    revaluePriced(state);
+    persist();
+    return { ok: true, ...r };
   }],
 
   ['POST', /^\/api\/disconnect$/, async () => {
@@ -180,6 +228,77 @@ const routes = [
     return { ok: true };
   }],
 ];
+
+function cleanName(s, fallback) { return String(s || '').trim().slice(0, 80) || fallback; }
+
+function pricedAccount(rawId) {
+  const a = state.accounts[decodeURIComponent(rawId)];
+  if (!a || a.source !== 'priced') throw httpError(404, 'No such account.');
+  return a;
+}
+
+// The form: { asOf, mode: 'value' | 'shares', rows: [{ ticker, name, amount }],
+// plan: { enabled, amount, allocation, schedule } }. Values become shares at
+// the asOf close, so prices are fetched first.
+async function pricedFromForm(body, prev) {
+  const asOf = /^\d{4}-\d{2}-\d{2}$/.test(body.asOf || '') ? body.asOf : null;
+  if (!asOf) throw httpError(400, 'Give the date the values are from.');
+  if (asOf > new Date().toISOString().slice(0, 10)) throw httpError(400, 'That date is in the future.');
+  const rows = (body.rows || []).map((r) => ({ ticker: String(r.ticker || '').trim().toUpperCase(), name: String(r.name || '').trim().slice(0, 80), amount: Number(String(r.amount ?? '').replace(/[$,\s]/g, '')) }))
+    .filter((r) => r.ticker);
+  if (!rows.length) throw httpError(400, 'Add at least one fund.');
+  for (const r of rows) {
+    if (!/^[A-Z0-9.^-]{1,12}$/.test(r.ticker)) throw httpError(400, `"${r.ticker}" isn't a ticker symbol.`);
+    if (!(r.amount >= 0)) throw httpError(400, `Enter a ${body.mode === 'shares' ? 'share count' : 'value'} for ${r.ticker}.`);
+  }
+  const plan = body.plan || {};
+  const allocation = {};
+  for (const [t, pct] of Object.entries(plan.allocation || {})) if (Number(pct) > 0) allocation[t.toUpperCase()] = Number(pct);
+  const pctTotal = Object.values(allocation).reduce((s, v) => s + v, 0);
+  if (plan.enabled && Math.abs(pctTotal - 100) > 0.5) throw httpError(400, `The contribution split adds up to ${pctTotal}%, not 100%.`);
+
+  const tickers = [...new Set([...rows.map((r) => r.ticker), ...Object.keys(allocation)])];
+  const errors = await refreshPrices(state, tickers);
+  if (errors.length) throw httpError(400, errors.join(' '));
+  state.lastPriceSync = new Date().toISOString();
+
+  const positions = rows.map((r) => {
+    if (body.mode === 'shares') return { ticker: r.ticker, name: r.name || state.prices[r.ticker]?.name || r.ticker, shares: r.amount };
+    try {
+      const s = sharesFromValue(r.amount, state.prices, r.ticker, asOf);
+      return { ticker: r.ticker, name: r.name || state.prices[r.ticker]?.name || r.ticker, shares: s.shares };
+    } catch (err) { throw httpError(400, err.message); }
+  });
+  const schedule = plan.schedule?.every === 'month'
+    ? { every: 'month', day: plan.schedule.day === 'lastBusiness' ? 'lastBusiness' : Math.min(31, Math.max(1, Number(plan.schedule.day) || 1)), lag: Math.min(10, Math.max(0, Number(plan.schedule.lag) || 0)) }
+    : { every: plan.schedule?.every === 'week' ? 'week' : '2weeks', anchor: /^\d{4}-\d{2}-\d{2}$/.test(plan.schedule?.anchor || '') ? plan.schedule.anchor : asOf, lag: Math.min(10, Math.max(0, Number(plan.schedule?.lag) || 0)) };
+  return {
+    asOf,
+    positions,
+    // Real transactions after the new date still count; older ones are in the new shares.
+    ledger: (prev?.ledger || []).filter((t) => t.date > asOf),
+    coveredUntil: prev?.coveredUntil && prev.coveredUntil > asOf ? prev.coveredUntil : asOf,
+    plan: { enabled: Boolean(plan.enabled), amount: Math.max(0, Number(plan.amount) || 0), allocation, schedule },
+  };
+}
+
+function importCsv(account, csv, filename) {
+  let parsed;
+  try { parsed = parsePaychexCsv(csv, filename); } catch (err) { throw httpError(400, err.message); }
+  const p = account.priced;
+  const have = new Set(p.ledger.map((t) => t.key));
+  let added = 0, before = 0;
+  for (const r of parsed.rows) {
+    if (r.date <= p.asOf) { before++; continue; }
+    if (have.has(r.key)) continue;
+    p.ledger.push(r);
+    have.add(r.key);
+    added++;
+  }
+  p.ledger.sort((a, b) => a.date.localeCompare(b.date));
+  if (parsed.to > p.coveredUntil) p.coveredUntil = parsed.to;
+  return { added, alreadyCounted: before, coveredUntil: p.coveredUntil };
+}
 
 const server = createServer(async (req, res) => {
   try {
