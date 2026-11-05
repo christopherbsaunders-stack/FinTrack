@@ -528,7 +528,7 @@ function drawLoan(card, l) {
     <div class="loan-tiles">
       <div class="tile"><div class="label">Left to pay</div><div class="v">${fmt(l.balance)}</div><div class="s">${l.loan.original ? `${Math.round((1 - l.balance / l.loan.original) * 100)}% of ${fmt(l.loan.original)} paid off` : 'Principal, from your lender'}</div></div>
       <div class="tile"><div class="label">Monthly payment</div><div class="v">${fmtCents(l.payment)}</div><div class="s">${
-        extra ? `${fmtCents(req.payment)} due + ${fmtCents(extra)} extra<br>Due: ${fmtCents(req.pi)} loan${l.escrow > 0 ? ` + ${fmtCents(l.escrow)} escrow` : ''}`
+        extra ? `${fmtCents(req.payment)} due + ${fmtCents(extra)} extra${l.escrow > 0 ? `<br>Due: ${fmtCents(req.pi)} loan + ${fmtCents(l.escrow)} escrow` : ''}`
         : l.escrow > 0 ? `${fmtCents(l.pi)} loan + ${fmtCents(l.escrow)} escrow` : 'All of it goes to the loan'}</div></div>
       <div class="tile"><div class="label">Next payment (${monthLabel(np.month)})</div>
         <div class="split" role="img" aria-label="Interest ${fmtCents(np.interest)}, principal ${fmtCents(np.principal)}${np.extra ? `, extra principal ${fmtCents(np.extra)}` : ''}">
