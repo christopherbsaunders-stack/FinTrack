@@ -236,6 +236,22 @@ const routes = [
     return { ok: true };
   }],
 
+  // Your average cost per share for a symbol the brokerage sends no cost for; null clears it.
+  ['PUT', /^\/api\/costs\/([^/]+)$/, async (req, [, rawSym]) => {
+    const symbol = decodeURIComponent(rawSym).toUpperCase();
+    if (!/^[A-Z0-9.^-]{1,12}$/.test(symbol)) throw httpError(400, `"${symbol}" isn't a ticker symbol.`);
+    const { avgCost } = await readJson(req);
+    state.costs ||= {};
+    if (avgCost == null || avgCost === '') delete state.costs[symbol];
+    else {
+      const v = Number(String(avgCost).replace(/[$,\s]/g, ''));
+      if (!(v > 0)) throw httpError(400, 'Enter the average cost per share, like 118.50.');
+      state.costs[symbol] = v;
+    }
+    persist();
+    return { ok: true };
+  }],
+
   // Split an account into buckets (emergency fund, vacation, ...); [] removes them.
   ['PUT', /^\/api\/accounts\/([^/]+)\/buckets$/, async (req, [, rawId]) => {
     const a = state.accounts[decodeURIComponent(rawId)];

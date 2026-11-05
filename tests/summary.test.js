@@ -158,3 +158,22 @@ test('brokerage holdings: price from value and shares; a cost of 0 is unknown, n
   assert.equal(by.VOO.gain, 39);
   assert.equal(by.VOO.price, 678);
 });
+
+test('an average cost you enter gives a gain where the brokerage sent none', () => {
+  const s = emptyState();
+  const rh = acct('rh', 'Individual', 'Robinhood', 579);
+  rh.holdings = [
+    { symbol: 'HAS', description: 'Hasbro Inc', shares: 2, value: 240, costBasis: 0 },
+    { symbol: 'VOO', description: 'Vanguard 500', shares: 0.5, value: 339, costBasis: 300 },
+  ];
+  applyAccountSet(s, { accounts: [rh] }, now);
+  s.accounts.rh.category = 'investments';
+  s.costs = { HAS: 100, VOO: 1 };
+  const by = Object.fromEntries(computeSummary(s, now).holdings.map((x) => [x.symbol, x]));
+  assert.equal(by.HAS.gain, 40);
+  assert.equal(by.HAS.gainPct, 0.2);
+  assert.equal(by.HAS.costSource, 'entered');
+  assert.equal(by.HAS.taxable, true);
+  assert.equal(by.VOO.gain, 39, "the brokerage's own cost wins over one entered");
+  assert.equal(by.VOO.costSource, 'brokerage');
+});

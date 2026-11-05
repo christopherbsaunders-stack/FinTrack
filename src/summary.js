@@ -93,7 +93,7 @@ export function computeSummary(state, now = new Date()) {
     history,
     cashFlow: flows.months,
     transactions: flows.recent,
-    holdings: topHoldings(visible),
+    holdings: topHoldings(visible, state.costs || {}),
     loans,
     buckets: allBuckets,
     emergency,
@@ -221,7 +221,9 @@ export function findTransfers(txs) {
   return ids;
 }
 
-function topHoldings(accounts) {
+// Holdings across accounts, by symbol. Where the brokerage doesn't send what
+// you paid, the average cost per share you entered (`costs`) fills it in.
+function topHoldings(accounts, costs = {}) {
   const map = new Map();
   for (const a of accounts) {
     for (const h of a.holdings || []) {
@@ -229,13 +231,19 @@ function topHoldings(accounts) {
       if (!key) continue;
       // SimpleFIN fills a missing name with "0.146 shares of AMD"; that says nothing the columns don't.
       const description = /^[\d.,]+ shares? of /i.test(h.description || '') ? '' : h.description;
-      const cur = map.get(key) || { symbol: h.symbol, description, value: 0, costBasis: 0, hasBasis: true, shares: 0, price: null };
+      const cur = map.get(key) || { symbol: h.symbol, description, value: 0, costBasis: 0, hasBasis: true, shares: 0, price: null, taxable: false, costSource: null };
+      if (a.category === 'investments') cur.taxable = true;
       if (!cur.description && description) cur.description = description;
       cur.value += h.value;
       cur.shares += Number(h.shares) || 0;
       if (h.price) cur.price = h.price;
       // A cost of 0 means the brokerage didn't say (saved before that was handled on sync).
-      if (h.costBasis == null || (h.costBasis === 0 && h.value > 0)) cur.hasBasis = false; else cur.costBasis += h.costBasis;
+      let basis = h.costBasis == null || (h.costBasis === 0 && h.value > 0) ? null : h.costBasis;
+      let source = basis == null ? null : 'brokerage';
+      const entered = h.symbol ? costs[h.symbol] : null;
+      if (basis == null && entered > 0 && Number(h.shares) > 0) { basis = entered * Number(h.shares); source = 'entered'; }
+      if (basis == null) cur.hasBasis = false; else cur.costBasis += basis;
+      cur.costSource = cur.costSource && cur.costSource !== source ? 'mixed' : source;
       map.set(key, cur);
     }
   }
@@ -245,6 +253,9 @@ function topHoldings(accounts) {
       // Brokerages send shares and market value; the price is the one they valued it at.
       price: h.price ?? (h.shares > 0 ? Math.round((h.value / h.shares) * 100) / 100 : null),
       gain: h.hasBasis ? r2(h.value - h.costBasis) : null,
+      gainPct: h.hasBasis && h.costBasis > 0 ? (h.value - h.costBasis) / h.costBasis : null,
+      costBasis: h.hasBasis ? r2(h.costBasis) : null,
+      avgCost: h.symbol && costs[h.symbol] ? costs[h.symbol] : null,
     }));
 }
 

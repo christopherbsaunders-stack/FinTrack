@@ -19,6 +19,7 @@ export function emptyState() {
     priceErrors: [],
     indexes: {},          // FRED series id -> { obs: { date: value }, fetchedAt }
     indexErrors: [],
+    costs: {},            // symbol -> average cost per share you entered (when the brokerage doesn't send it)
     lastPriceSync: null,
     settings: { syncHours: 6 },
   };

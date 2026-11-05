@@ -322,8 +322,28 @@ function renderHoldings() {
     h.map((x) => `<tr><td><b>${esc(x.symbol || '')}</b> <span class="muted">${esc(x.description)}</span></td>
       <td class="num">${x.shares ? share.format(x.shares) : '<span class="muted">–</span>'}</td>
       <td class="num">${x.price ? fmtCents(x.price) : '<span class="muted">–</span>'}</td><td class="num">${fmt(x.value)}</td>
-      <td class="num ${cls(x.gain)}">${x.gain == null ? '<span class="muted">–</span>' : signed(x.gain)}</td></tr>`).join('') + '</tbody>';
+      <td class="num">${gainCell(x)}</td></tr>`).join('') + '</tbody>';
 }
+
+// Gain and its percent; where the brokerage sent no cost, a link to enter it.
+function gainCell(x) {
+  const canEnter = x.symbol && x.taxable && x.costSource !== 'brokerage';
+  if (x.gain == null) return canEnter ? `<button class="linkish" data-cost="${esc(x.symbol)}">Add cost</button>` : '<span class="muted">–</span>';
+  const pct = x.gainPct == null ? '' : ` <span class="small">(${x.gainPct >= 0 ? '+' : '−'}${Math.abs(x.gainPct * 100).toFixed(1)}%)</span>`;
+  const shown = `<span class="${cls(x.gain)}">${signed(x.gain)}${pct}</span>`;
+  return x.costSource === 'entered' && canEnter
+    ? `<button class="linkish gain-edit" data-cost="${esc(x.symbol)}" title="Your average cost: ${fmtCents(x.avgCost)} a share. Click to change.">${shown}</button>`
+    : shown;
+}
+
+$('holdings').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-cost]');
+  if (!b) return;
+  const x = data.holdings.find((h) => h.symbol === b.dataset.cost);
+  const v = prompt(`Your average cost per share for ${x.symbol}.\nIn Robinhood: open ${x.symbol} and look for "Your average cost".\nLeave empty to remove it.`, x.avgCost ?? '');
+  if (v === null) return;
+  act(() => api(`/api/costs/${encodeURIComponent(x.symbol)}`, { method: 'PUT', body: JSON.stringify({ avgCost: v.trim() === '' ? null : v }) }));
+});
 
 function renderTransactions() {
   const q = $('txFilter').value.trim().toLowerCase();
