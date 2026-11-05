@@ -84,6 +84,7 @@ export function applyAccountSet(state, { accounts }, now = new Date()) {
       displayName: prev?.displayName || null,
       hidden: prev?.hidden || false,
       loan: prev?.loan || null,
+      buckets: prev?.buckets || null,
       firstSeen: prev?.firstSeen || now.toISOString(),
       lastSeen: now.toISOString(),
     };

@@ -206,3 +206,19 @@ details.sched summary { cursor: pointer; font-weight: 600; font-size: 13px; colo
 .loan-prompt { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .index-select { max-width: 100%; }
 .index-note { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+tr.bucket-row td { border-bottom: 1px solid var(--grid); padding-top: 5px; padding-bottom: 5px; }
+tr.bucket-row td:first-child { padding-left: 28px; }
+.bucket-name::before { content: "↳ "; color: var(--muted); }
+td.center, th.center { text-align: center; }
+.bucket-form input[type="radio"] { width: auto; min-width: 0; }
+.emergency { display: grid; grid-template-columns: auto 1fr; gap: 6px 24px; align-items: center; padding-bottom: 14px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+@media (max-width: 600px) { .emergency { grid-template-columns: 1fr; } }
+.big2 { font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
+.em-months { font-size: 14px; line-height: 1.5; }
+.bucket { padding: 10px 0; border-bottom: 1px solid var(--grid); }
+.bucket:last-child { border-bottom: 0; }
+.bucket-top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.bucket .track { display: block; height: 8px; background: var(--grid); border-radius: 4px; overflow: hidden; margin: 6px 0 3px; }
+.bucket .fill { display: block; height: 100%; background: var(--s1); border-radius: 4px; }
+.bucket-form td:first-child input { width: 100%; min-width: 150px; text-transform: none; }

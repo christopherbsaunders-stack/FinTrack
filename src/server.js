@@ -18,6 +18,7 @@ import { parsePaychexCsv, sharesFromValue } from './priced.js';
 import { computeSummary } from './summary.js';
 import { CATEGORIES, kindOf } from './classify.js';
 import { validateLoan } from './loans.js';
+import { validateBuckets } from './buckets.js';
 import { demoState } from './demo.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -231,6 +232,22 @@ const routes = [
     else a.index = await anchorTo(String(series).trim().toUpperCase(), a.balance);
     pruneIndexes();
     revaluePriced(state);
+    persist();
+    return { ok: true };
+  }],
+
+  // Split an account into buckets (emergency fund, vacation, ...); [] removes them.
+  ['PUT', /^\/api\/accounts\/([^/]+)\/buckets$/, async (req, [, rawId]) => {
+    const a = state.accounts[decodeURIComponent(rawId)];
+    if (!a) throw httpError(404, 'No such account.');
+    if (kindOf(a.category) !== 'asset') throw httpError(400, 'Buckets are for accounts that hold money.');
+    const { buckets } = await readJson(req);
+    let list;
+    try { list = validateBuckets(buckets || []); } catch (err) { throw httpError(400, err.message); }
+    if (list.some((b) => b.emergency) && Object.values(state.accounts).some((o) => o.id !== a.id && o.buckets?.some((b) => b.emergency))) {
+      throw httpError(400, 'Another account already has the emergency fund. Untick it there first.');
+    }
+    a.buckets = list.length ? list : null;
     persist();
     return { ok: true };
   }],

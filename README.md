@@ -43,6 +43,8 @@ The account shows what's estimated ("Estimated since Nov 5: 1 paycheck ($1,715.8
 - this year's interest, principal and escrow (estimated until FinTrack has tracked the loan since January 1; your Form 1098 has the exact interest);
 - a year-by-year schedule.
 
+**Savings buckets.** One bank account often holds several pots of money. Click **Split into buckets** on the account: give each bucket an amount set aside (and an optional goal), and pick one bucket to hold the rest of the balance, where deposits and interest land. When you move money between buckets, change their amounts. Mark one bucket as the emergency fund and enter the monthly expenses it should cover: the **Savings buckets** card shows how many months it would last (FinTrack's own measure of your spending is used if you leave that empty, but it only sees the accounts you track). Buckets don't change net worth; they show what the money is for.
+
 **Home and car values.** Use **Add home, car or other**. For a home, choose **Follow home prices**: your state's FHFA House Price Index (quarterly, from FRED), the US index, or any other FRED series, such as your county's (yearly; Loudoun County, VA is ATNHPIUS51107A). FinTrack remembers the index when you enter the value and scales the value each time a new quarter (or year) comes out; the row shows how far it has moved ("+1.7% since you set it"). When you have a better number (Zillow, Redfin, an appraisal), click **Update value**: it starts following the index again from there. If a series stops being published, the dashboard says so. A car's value you update by hand. The dashboard shows equity (value minus the loan).
 
 ## Where your data lives
@@ -83,6 +85,7 @@ src/simplefin.js   SimpleFIN client: claim a setup token, fetch accounts and tra
 src/sync.js        merge a fetch into the state; record today's value of every account
 src/classify.js    categories (asset or debt) and the guess from an account's name
 src/summary.js     totals, history, cash flow, holdings for the dashboard (pure, tested)
+src/buckets.js     splitting an account into buckets; emergency fund months
 src/loans.js       loan math: payoff, interest vs principal, extra payments (also loaded by the dashboard)
 src/hpi.js         home values that follow a house price index (FRED)
 src/prices.js      daily fund prices and payouts from Yahoo Finance

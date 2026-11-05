@@ -65,6 +65,11 @@
       </section>
     </div>
 
+    <section class="card" id="bucketsCard" hidden>
+      <h2>Savings buckets</h2>
+      <div id="bucketList"></div>
+    </section>
+
     <div id="loans"></div>
 
     <section class="card">
@@ -122,6 +127,31 @@
       <hr>
       <button type="button" id="disconnectBtn" class="danger">Disconnect SimpleFIN</button>
       <p class="muted small">Forgets the access link. Your history stays. To cut access entirely, also delete the connection in SimpleFIN Bridge.</p>
+    </form>
+  </dialog>
+
+ <dialog id="bucketsDlg" class="wide">
+    <form id="bucketsForm">
+      <h2 id="bucketsTitle">Buckets</h2>
+      <p class="muted small">Split this account into the money you've set aside for each thing. Your bank only reports the total, so give each bucket an amount, except one that holds the rest: deposits and interest land there. When you move money between buckets, change the amounts here.</p>
+      <div class="table-wrap">
+        <table class="fund-rows bucket-form">
+          <thead><tr><th>Bucket</th><th class="num">Amount</th><th class="center">Holds the rest</th><th class="num">Goal</th><th class="center">Emergency fund</th><th></th></tr></thead>
+          <tbody id="bRows"></tbody>
+        </table>
+      </div>
+      <button type="button" class="linkish" id="bAdd">+ Add bucket</button>
+      <p class="small" id="bSummary"></p>
+      <div class="form-grid" id="bExpensesWrap" hidden>
+        <label>Monthly expenses the emergency fund should cover ($) <input id="bExpenses" inputmode="decimal" placeholder="e.g. 6000"></label>
+      </div>
+      <p class="muted small" id="bExpensesHint"></p>
+      <div id="bError" class="form-error" role="alert"></div>
+      <div class="row">
+        <button type="submit">Save</button>
+        <button type="button" class="ghost" id="bCancel">Cancel</button>
+        <button type="button" class="danger" id="bRemoveAll" hidden>Remove buckets</button>
+      </div>
     </form>
   </dialog>
 

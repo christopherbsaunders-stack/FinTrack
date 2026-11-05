@@ -3,6 +3,7 @@
 import { CATEGORIES, CATEGORY_ORDER, kindOf, signedValue } from './classify.js';
 import { dayKey } from './store.js';
 import { loanSummary } from './loans.js';
+import { splitBuckets, averageSpending, monthsCovered } from './buckets.js';
 
 const DAY = 86400000;
 const FLOW_CATEGORIES = new Set(['cash', 'creditCard']);
@@ -41,6 +42,26 @@ export function computeSummary(state, now = new Date()) {
   for (const a of accounts) a.change30 = accountChange(state.snapshots, a.id, a.value, dayKey(new Date(now.getTime() - 30 * DAY)));
 
   const flows = cashFlow(state, now);
+
+  // Buckets: each account's balance split into named parts.
+  const allBuckets = [];
+  for (const a of accounts) {
+    if (!a.buckets?.length) continue;
+    const split = splitBuckets(a.balance, a.buckets);
+    a.buckets = split.buckets;
+    a.bucketWarnings = split.warnings;
+    if (!a.hidden) for (const b of split.buckets) allBuckets.push({ ...b, accountId: a.id, account: a.name });
+  }
+  const em = allBuckets.find((b) => b.emergency);
+  const thisMonth = dayKey(now).slice(0, 7);
+  const measured = averageSpending(flows.months, thisMonth);
+  const emergency = em ? {
+    name: em.name, account: em.account, value: em.value, goal: em.goal,
+    expenses: em.expenses || measured?.amount || null,
+    source: em.expenses ? 'entered' : measured ? 'measured' : null,
+    measured,
+    months: monthsCovered(em.value, em.expenses || measured?.amount),
+  } : null;
   const loans = visible.filter((a) => a.kind === 'liability' && a.loan)
     .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category) || Math.abs(b.value) - Math.abs(a.value))
     .map((a) => loanFor(state, a, now));
@@ -74,6 +95,8 @@ export function computeSummary(state, now = new Date()) {
     transactions: flows.recent,
     holdings: topHoldings(visible),
     loans,
+    buckets: allBuckets,
+    emergency,
     categories: CATEGORY_ORDER.map((id) => ({ id, ...CATEGORIES[id] })),
   };
 }

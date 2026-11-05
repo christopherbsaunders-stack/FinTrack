@@ -90,6 +90,7 @@ function render() {
   renderAccounts();
   renderHoldings();
   renderLoans();
+  renderBuckets();
   renderTransactions();
 }
 
@@ -276,12 +277,21 @@ function renderAccounts() {
       <td class="num">
         ${manual ? '<button class="linkish" data-act="value">Update value</button> · ' : ''}
         ${manual && a.category === 'property' ? `<button class="linkish" data-act="index">${a.index ? 'Price index' : 'Follow home prices'}</button> · ` : ''}
+        ${BUCKET_CATS.has(a.category) ? `<button class="linkish" data-act="buckets">${a.buckets?.length ? 'Buckets' : 'Split into buckets'}</button> · ` : ''}
         ${LOAN_CATS.has(a.category) ? `<button class="linkish" data-act="loan">${a.loan ? 'Loan details' : 'Add loan details'}</button> · ` : ''}
         ${priced ? '<button class="linkish" data-act="import">Import transactions</button> · <button class="linkish" data-act="editPriced">Edit holdings</button> · ' : ''}
         <button class="linkish" data-act="rename">Rename</button> ·
         <button class="linkish" data-act="hide">${a.hidden ? 'Show' : 'Hide'}</button>
         ${manual || priced ? ' · <button class="linkish" data-act="delete">Delete</button>' : ''}
       </td></tr>`;
+    // The account's buckets, under it.
+    for (const b of a.buckets || []) {
+      html += `<tr class="bucket-row${a.hidden ? ' hidden-row' : ''}" data-id="${esc(a.id)}">
+        <td colspan="2"><span class="bucket-name">${esc(b.name)}</span>${b.emergency ? '<span class="pending">emergency fund</span>' : ''}${b.rest ? '<span class="sub">The rest of the balance</span>' : ''}</td>
+        <td class="num ${b.value < 0 ? 'down' : ''}">${fmtCents(b.value)}</td>
+        <td colspan="3" class="small muted">${b.goal ? `${Math.round(b.progress * 100)}% of ${fmt(b.goal)} goal` : ''}</td></tr>`;
+    }
+    for (const w of a.bucketWarnings || []) html += `<tr class="bucket-row" data-id="${esc(a.id)}"><td colspan="6"><div class="notice">${esc(w)}</div></td></tr>`;
   }
   $('accounts').innerHTML = html + '</tbody>';
 }
@@ -468,6 +478,7 @@ $('accounts').addEventListener('click', (ev) => {
     if (v !== null && v.trim() !== '') act(() => patch(path, { balance: Number(v.replace(/[$,\s]/g, '')) }));
   }
   if (b.dataset.act === 'loan') openLoan(a);
+  if (b.dataset.act === 'buckets') openBuckets(a);
   if (b.dataset.act === 'index') openIndex(a);
   if (b.dataset.act === 'editPriced') openPriced(a);
   if (b.dataset.act === 'import') { importTarget = a; $('importFile').value = ''; $('importFile').click(); }
@@ -483,6 +494,111 @@ $('settingsForm').addEventListener('submit', (ev) => {
 });
 $('disconnectBtn').addEventListener('click', () => {
   if (confirm('Disconnect SimpleFIN? Syncing stops until you paste a new setup token.')) { $('settings').close(); act(() => post('/api/disconnect')); }
+});
+
+// ---------- buckets: one account split into named parts ----------
+
+const BUCKET_CATS = new Set(['cash', 'investments', 'otherAsset']);
+
+function renderBuckets() {
+  const list = data.buckets || [];
+  $('bucketsCard').hidden = !list.length;
+  if (!list.length) return;
+  const em = data.emergency;
+  let head = '';
+  if (em) {
+    const m = em.months;
+    head = `<div class="emergency">
+      <div><div class="label">Emergency fund</div><div class="big2">${fmt(em.value)}</div></div>
+      <div class="em-months">${m == null ? '<span class="muted">Enter your monthly expenses in Buckets to see how long it would last.</span>'
+        : `Covers <b>${m.toFixed(1)} months</b> of expenses at ${fmt(em.expenses)} a month<span class="muted">${em.source === 'entered' ? ' (the amount you entered)' : ` (your average spending over the last ${em.measured.months} months, from the accounts FinTrack sees)`}</span>.
+           <span class="muted">A common guide is 3 to 6 months.</span>`}</div></div>`;
+  }
+  $('bucketList').innerHTML = head + list.map((b) => `
+    <div class="bucket">
+      <div class="bucket-top"><span><b>${esc(b.name)}</b> <span class="muted small">${esc(b.account)}</span></span><span class="${b.value < 0 ? 'down' : ''}"><b>${fmt(b.value)}</b>${b.goal ? `<span class="muted"> of ${fmt(b.goal)}</span>` : ''}</span></div>
+      ${b.goal ? `<div class="track" role="img" aria-label="${Math.round(b.progress * 100)}% of goal"><span class="fill" style="width:${Math.min(100, Math.max(0, b.progress * 100))}%"></span></div>
+        <div class="small muted">${b.progress >= 1 ? 'Goal reached' : `${fmt(b.goal - b.value)} to go · ${Math.round(b.progress * 100)}%`}</div>` : ''}
+    </div>`).join('');
+}
+
+let bucketAccount = null;
+
+function bucketRow(b = {}) {
+  const tr = document.createElement('tr');
+  tr.dataset.bid = b.id || '';
+  tr.innerHTML = `<td><input class="bn" value="${esc(b.name || '')}" placeholder="Vacation" aria-label="Bucket name"></td>
+    <td class="num"><input class="ba" type="number" step="0.01" min="0" value="${b.amount ?? ''}" aria-label="Amount set aside"></td>
+    <td class="center"><input type="radio" name="bRest" class="br" ${b.amount == null && b.name ? 'checked' : ''} aria-label="Holds the rest"></td>
+    <td class="num"><input class="bg" type="number" step="1" min="0" value="${b.goal ?? ''}" placeholder="Optional" aria-label="Goal"></td>
+    <td class="center"><input type="radio" name="bEm" class="be" ${b.emergency ? 'checked' : ''} aria-label="Emergency fund"></td>
+    <td><button type="button" class="linkish" data-rm>Remove</button></td>`;
+  $('bRows').appendChild(tr);
+}
+
+function bucketForm() {
+  return [...$('bRows').querySelectorAll('tr')].map((tr) => ({
+    id: tr.dataset.bid || undefined,
+    name: tr.querySelector('.bn').value.trim(),
+    rest: tr.querySelector('.br').checked,
+    amount: tr.querySelector('.ba').value,
+    goal: tr.querySelector('.bg').value,
+    emergency: tr.querySelector('.be').checked,
+  })).filter((b) => b.name || b.amount || b.goal);
+}
+
+function updateBucketForm() {
+  const rows = [...$('bRows').querySelectorAll('tr')];
+  let set = 0;
+  for (const tr of rows) {
+    const rest = tr.querySelector('.br').checked;
+    const amt = tr.querySelector('.ba');
+    amt.disabled = rest;
+    amt.placeholder = rest ? 'The rest' : '';
+    if (rest) amt.value = '';
+    else set += Number(amt.value) || 0;
+  }
+  const bal = bucketAccount.balance;
+  const rest = bal - set;
+  $('bSummary').innerHTML = `Balance ${fmtCents(bal)} · set aside ${fmtCents(set)} · <span class="${rest < 0 ? 'down' : ''}">the rest ${fmtCents(rest)}</span>`;
+  const em = rows.some((tr) => tr.querySelector('.be').checked);
+  $('bExpensesWrap').hidden = !em;
+}
+
+function openBuckets(a) {
+  bucketAccount = a;
+  $('bucketsTitle').textContent = `${a.name}: buckets`;
+  $('bRows').innerHTML = '';
+  $('bError').textContent = '';
+  const list = a.buckets?.length ? a.buckets : [{ name: 'Emergency fund', amount: null, emergency: true }, {}];
+  for (const b of list) bucketRow(b);
+  const em = list.find((b) => b.emergency);
+  $('bExpenses').value = em?.expenses ?? '';
+  const measured = data.emergency?.measured;
+  $('bExpensesHint').textContent = measured ? `Your measured spending is about ${fmt(measured.amount)} a month, but that only counts the accounts FinTrack sees.` : '';
+  $('bRemoveAll').hidden = !a.buckets?.length;
+  updateBucketForm();
+  $('bucketsDlg').showModal();
+}
+
+$('bAdd').addEventListener('click', () => { bucketRow(); updateBucketForm(); });
+$('bRows').addEventListener('click', (ev) => { if (ev.target.closest('[data-rm]')) { ev.target.closest('tr').remove(); updateBucketForm(); } });
+$('bucketsForm').addEventListener('input', updateBucketForm);
+$('bucketsForm').addEventListener('change', updateBucketForm);
+$('bCancel').addEventListener('click', () => $('bucketsDlg').close());
+async function saveBuckets(buckets) {
+  await api(`/api/accounts/${encodeURIComponent(bucketAccount.id)}/buckets`, { method: 'PUT', body: JSON.stringify({ buckets }) });
+  $('bucketsDlg').close();
+  await load();
+}
+$('bRemoveAll').addEventListener('click', async () => {
+  if (!confirm('Remove all the buckets from this account? The balance itself is unchanged.')) return;
+  try { await saveBuckets([]); } catch (err) { $('bError').textContent = err.message; }
+});
+$('bucketsForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const buckets = bucketForm().map((b) => ({ ...b, expenses: b.emergency ? $('bExpenses').value : null }));
+  try { await saveBuckets(buckets); } catch (err) { $('bError').textContent = err.message; }
 });
 
 // ---------- loans: payoff, interest vs principal, extra payments ----------
