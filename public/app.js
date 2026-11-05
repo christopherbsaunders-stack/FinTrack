@@ -464,6 +464,7 @@ function openPriced(a = null) {
   $('pricedForm').reset();
   $('pError').textContent = '';
   $('pCsvNote').textContent = '';
+  $('pCsvName').textContent = 'No file chosen';
   $('pRows').innerHTML = '';
   $('pricedTitle').textContent = a ? `Edit ${a.name}` : 'Add a 401(k) by holdings';
   if (a) {
@@ -497,6 +498,7 @@ $('pricedForm').addEventListener('change', updateTotals);
 
 $('pCsv').addEventListener('change', async () => {
   const f = $('pCsv').files[0];
+  $('pCsvName').textContent = f ? f.name : 'No file chosen';
   if (!f) return;
   try {
     const csv = await f.text();

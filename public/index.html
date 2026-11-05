@@ -129,7 +129,11 @@
       <fieldset>
         <legend>Fill in from a Paychex transactions file (optional)</legend>
         <p class="muted small">Paychex Flex &rarr; Retirement &rarr; Transactions &rarr; Download, for a range that includes your last paycheck. It fills in the funds, your contribution and how it's split.</p>
-        <input type="file" id="pCsv" accept=".csv,text/csv">
+        <div class="file-pick">
+          <input type="file" id="pCsv" accept=".csv,text/csv">
+          <label for="pCsv" class="ghost">Choose a CSV file</label>
+          <span id="pCsvName" class="file-name">No file chosen</span>
+        </div>
         <div id="pCsvNote" class="small"></div>
       </fieldset>
 
