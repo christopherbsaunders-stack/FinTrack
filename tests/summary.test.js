@@ -125,3 +125,18 @@ test('the first sync is fetched in pieces of at most 45 days and merged', async 
   assert.equal(s.accounts.c.balance, 200, 'balance from the newest piece');
   assert.deepEqual(Object.keys(s.transactions).sort(), ['t1', 't2']);
 });
+
+test('loans with details get a payoff summary; the details survive a sync', () => {
+  const s = demoState(now);
+  const r = computeSummary(s, now);
+  assert.deepEqual(r.loans.map((l) => l.category).sort(), ['autoLoan', 'mortgage']);
+  const m = r.loans.find((l) => l.category === 'mortgage');
+  assert.equal(m.balance, 284000);
+  assert.equal(m.pi, 1845);
+  assert.ok(m.monthsLeft > 200 && m.monthsLeft < 360, `months ${m.monthsLeft}`);
+  assert.equal(r.loans[0].category, 'mortgage', 'mortgage first');
+  assert.equal(m.ytd.estimated, true, 'demo transactions start mid-year, so this year is estimated');
+  assert.ok(m.ytd.interest > 0);
+  applyAccountSet(s, { accounts: [acct('mtg', 'Mortgage', 'Rocket Mortgage', -283500)] }, now);
+  assert.equal(s.accounts.mtg.loan.rate, 6.25);
+});

@@ -35,6 +35,14 @@ From then on FinTrack syncs on its own every 6 hours while it's running (change 
 
 The account shows what's estimated ("Estimated since Nov 5: 1 paycheck ($1,715.86)"). To make it exact, download your transactions from Paychex Flex (Retirement → Transactions → Download) and use **Import transactions**: the real contributions, payouts and fees replace the estimates for the dates the file covers. Importing the same file twice doesn't count anything twice. A Paychex transactions file in the setup form fills in the funds, the contribution and the split for you. If you move money between funds, use **Edit holdings** and enter the new values.
 
+**Mortgage and other loans.** The balance syncs from your lender. Click **Add loan details** on the loan (or on the mortgage card) and enter the interest rate, the whole monthly payment, and the escrow in it (taxes, insurance, PMI). Optionally add the amount borrowed, the term and the first payment month: FinTrack then shows your original payoff date and suggests the escrow. The loan's card shows:
+
+- what's left, the monthly payment split into loan and escrow, and how the next payment splits into interest and principal;
+- the payoff date and the interest still to pay at your current payment;
+- **What if you paid more?** A slider for extra each month and a box for a one-time payment: the new payoff date, how much sooner, and the interest saved, with both balances on a chart;
+- this year's interest, principal and escrow (estimated until FinTrack has tracked the loan since January 1; your Form 1098 has the exact interest);
+- a year-by-year schedule.
+
 **Home and car values.** Use **Add home, car or other** and update the value now and then. The dashboard shows equity (value minus the loan).
 
 ## Where your data lives
@@ -75,6 +83,7 @@ src/simplefin.js   SimpleFIN client: claim a setup token, fetch accounts and tra
 src/sync.js        merge a fetch into the state; record today's value of every account
 src/classify.js    categories (asset or debt) and the guess from an account's name
 src/summary.js     totals, history, cash flow, holdings for the dashboard (pure, tested)
+src/loans.js       loan math: payoff, interest vs principal, extra payments (also loaded by the dashboard)
 src/prices.js      daily fund prices and payouts from Yahoo Finance
 src/priced.js      accounts valued from their holdings: paydays, estimates, Paychex CSV import
 src/store.js       the JSON state file

@@ -1,5 +1,7 @@
 // FinTrack dashboard. Fetches /api/summary and draws everything; no libraries.
 
+import { compare, byYear, scheduledPayment, addMonths } from './loans.js';
+
 const $ = (id) => document.getElementById(id);
 const SVGNS = 'http://www.w3.org/2000/svg';
 let data = null;
@@ -84,6 +86,7 @@ function render() {
   renderCashFlow();
   renderAccounts();
   renderHoldings();
+  renderLoans();
   renderTransactions();
 }
 
@@ -269,6 +272,7 @@ function renderAccounts() {
       <td class="small muted">${manual ? 'You set it' : priced ? (a.status?.priceDate ? `Close ${shortDate(a.status.priceDate)}` : 'No price yet') : ago(a.balanceDate)}</td>
       <td class="num">
         ${manual ? '<button class="linkish" data-act="value">Update value</button> · ' : ''}
+        ${LOAN_CATS.has(a.category) ? `<button class="linkish" data-act="loan">${a.loan ? 'Loan details' : 'Add loan details'}</button> · ` : ''}
         ${priced ? '<button class="linkish" data-act="import">Import transactions</button> · <button class="linkish" data-act="editPriced">Edit holdings</button> · ' : ''}
         <button class="linkish" data-act="rename">Rename</button> ·
         <button class="linkish" data-act="hide">${a.hidden ? 'Show' : 'Hide'}</button>
@@ -398,6 +402,7 @@ $('accounts').addEventListener('click', (ev) => {
     const v = prompt(`New value for ${a.name}`, Math.abs(a.balance));
     if (v !== null && v.trim() !== '') act(() => patch(path, { balance: Number(v.replace(/[$,\s]/g, '')) }));
   }
+  if (b.dataset.act === 'loan') openLoan(a);
   if (b.dataset.act === 'editPriced') openPriced(a);
   if (b.dataset.act === 'import') { importTarget = a; $('importFile').value = ''; $('importFile').click(); }
   if (b.dataset.act === 'delete' && confirm(`Delete ${a.name} and its history?`)) act(() => api(path, { method: 'DELETE' }));
@@ -412,6 +417,210 @@ $('settingsForm').addEventListener('submit', (ev) => {
 });
 $('disconnectBtn').addEventListener('click', () => {
   if (confirm('Disconnect SimpleFIN? Syncing stops until you paste a new setup token.')) { $('settings').close(); act(() => post('/api/disconnect')); }
+});
+
+// ---------- loans: payoff, interest vs principal, extra payments ----------
+
+const LOAN_CATS = new Set(['mortgage', 'autoLoan', 'studentLoan', 'otherDebt']);
+const whatIf = loadWhatIf();   // { accountId: { extra, lump } }, remembered in this browser
+const schedOpen = new Set();   // loans whose yearly schedule is open
+
+function loadWhatIf() { try { return JSON.parse(localStorage.getItem('fintrack.whatIf') || '{}'); } catch { return {}; } }
+function saveWhatIf() { try { localStorage.setItem('fintrack.whatIf', JSON.stringify(whatIf)); } catch { /* private window */ } }
+
+const monthLabel = (ym) => (ym ? new Date(`${ym}-15T12:00:00`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '–');
+function span(months) {
+  if (!Number.isFinite(months)) return 'never';
+  const y = Math.floor(months / 12), m = months % 12;
+  return [y ? `${y} year${y === 1 ? '' : 's'}` : '', m ? `${m} month${m === 1 ? '' : 's'}` : ''].filter(Boolean).join(' ') || '0 months';
+}
+
+function renderLoans() {
+  const el = $('loans');
+  const missing = data.accounts.filter((a) => !a.hidden && a.category === 'mortgage' && !a.loan);
+  el.innerHTML = missing.map((a) => `<section class="card loan-prompt" data-id="${esc(a.id)}">
+      <div><h2>${esc(a.name)} <span class="muted small">${esc(a.org)}</span></h2>
+      <span class="muted">Add the rate, payment and escrow to see the payoff date, interest vs principal, and what paying more would save.</span></div>
+      <button type="button" data-act="loan">Add loan details</button></section>`).join('')
+    + data.loans.map((l) => `<section class="card loan-card" data-id="${esc(l.id)}"></section>`).join('');
+  for (const l of data.loans) drawLoan(el.querySelector(`.loan-card[data-id="${CSS.escape(l.id)}"]`), l);
+}
+
+function drawLoan(card, l) {
+  const w = whatIf[l.id] || { extra: 0, lump: 0 };
+  const total = l.nextPayment.interest + l.nextPayment.principal || 1;
+  const maxExtra = Math.max(2000, Math.ceil(l.payment / 500) * 500);
+  card.innerHTML = `
+    <div class="card-head">
+      <h2>${esc(l.name)} <span class="muted small">${esc(l.org)} · ${l.rate}%</span></h2>
+      <button type="button" class="ghost" data-act="loan">Loan details</button>
+    </div>
+    ${l.warnings.map((x) => `<div class="notice loan-warn">${esc(x)}</div>`).join('')}
+    <div class="loan-tiles">
+      <div class="tile"><div class="label">Left to pay</div><div class="v">${fmt(l.balance)}</div><div class="s">${l.loan.original ? `${Math.round((1 - l.balance / l.loan.original) * 100)}% of ${fmt(l.loan.original)} paid off` : 'Principal, from your lender'}</div></div>
+      <div class="tile"><div class="label">Monthly payment</div><div class="v">${fmtCents(l.payment)}</div><div class="s">${fmtCents(l.pi)} loan + ${fmtCents(l.escrow)} escrow</div></div>
+      <div class="tile"><div class="label">Next payment (${monthLabel(l.nextPayment.month)})</div>
+        <div class="split" role="img" aria-label="Interest ${fmtCents(l.nextPayment.interest)}, principal ${fmtCents(l.nextPayment.principal)}">
+          <span style="width:${(l.nextPayment.interest / total) * 100}%;background:var(--s2)"></span><span style="width:${(l.nextPayment.principal / total) * 100}%;background:var(--s1)"></span></div>
+        <div class="split-key"><span><i style="background:var(--s2)"></i>Interest ${fmtCents(l.nextPayment.interest)}</span><span><i style="background:var(--s1)"></i>Principal ${fmtCents(l.nextPayment.principal)}</span></div></div>
+      <div class="tile"><div class="label">Paid off</div><div class="v">${l.never ? 'Never' : monthLabel(l.payoffMonth)}</div><div class="s">${l.never ? 'The payment is too small' : `${span(l.monthsLeft)} left · ${fmt(l.interestLeft)} interest to go`}</div></div>
+    </div>
+    ${l.scheduled?.payoffMonth ? `<p class="small muted">Original schedule: ${fmtCents(l.scheduled.pi)} principal and interest, paid off ${monthLabel(l.scheduled.payoffMonth)}.${!l.never && l.payoffMonth < l.scheduled.payoffMonth ? ` You're ahead of it by ${span(monthsBetween(l.payoffMonth, l.scheduled.payoffMonth))}.` : ''}</p>` : ''}
+
+    <div class="whatif">
+      <h3>What if you paid more?</h3>
+      <div class="whatif-controls">
+        <label for="x-${esc(l.id)}">Extra each month</label><span></span>
+        <input type="range" id="x-${esc(l.id)}" class="extra-range" min="0" max="${maxExtra}" step="25" value="${w.extra}">
+        <input type="number" class="extra-num" min="0" step="25" value="${w.extra}" aria-label="Extra each month in dollars">
+        <label>One-time payment now</label>
+        <input type="number" class="lump-num" min="0" step="100" value="${w.lump || ''}" placeholder="$0" aria-label="One-time payment in dollars">
+      </div>
+      <div class="whatif-result" aria-live="polite"></div>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Current payment</span><span class="more-key"><i style="background:var(--s3)"></i>Paying more</span></div>
+      <div class="chart loan-chart"></div>
+    </div>
+
+    <div class="ytd">
+      <h3>${new Date().getFullYear()} so far (${l.ytd.payments} payment${l.ytd.payments === 1 ? '' : 's'})</h3>
+      <div class="ytd-row">
+        <div>Interest<b>${fmtCents(l.ytd.interest)}</b></div>
+        <div>Principal<b>${fmtCents(l.ytd.principal)}</b></div>
+        <div>Escrow<b>${fmtCents(l.ytd.escrow)}</b></div>
+      </div>
+      <p class="small muted">${l.ytd.estimated ? `Estimated from your rate, payment and today's balance, assuming the regular payment each month. FinTrack will use your real balances once it has tracked this loan since January 1.` : 'From your balances and the payments your lender reports.'}${l.category === 'mortgage' ? " Your lender's Form 1098 has the exact interest for taxes." : ''}</p>
+    </div>
+
+    <details class="sched"><summary>Year-by-year schedule</summary><div class="table-wrap"><table class="sched-table"></table></div></details>`;
+
+  const update = () => {
+    const extra = Math.max(0, Number(card.querySelector('.extra-num').value) || 0);
+    const lump = Math.max(0, Number(card.querySelector('.lump-num').value) || 0);
+    whatIf[l.id] = { extra, lump }; saveWhatIf();
+    const c = compare(l.balance, l.loan, { extra, lump, startMonth: l.nextPayment.month });
+    const changed = extra > 0 || lump > 0;
+    const res = card.querySelector('.whatif-result');
+    if (!changed) res.innerHTML = '<span class="muted">Move the slider or enter a one-time payment to see how much sooner the loan is paid off and how much interest you save.</span>';
+    else if (c.more.never) res.innerHTML = '<span class="down">Even with that, the payment doesn\'t cover the interest.</span>';
+    else res.innerHTML = `${extra ? `Paying <b>${fmtCents(l.payment + extra)}</b> a month` : 'With that payment'}${extra && lump ? ` and ${fmt(lump)} now` : ''}: paid off <b>${monthLabel(c.more.lastMonth)}</b>, ${c.base.never ? '' : `<b class="up">${span(c.monthsSooner)} sooner</b>, `}saving <b class="up">${fmt(c.interestSaved ?? 0)}</b> in interest.`;
+    card.querySelector('.more-key').hidden = !changed;
+    loanChart(card.querySelector('.loan-chart'), c, changed);
+    const yrs = byYear((changed ? c.more : c.base).rows);
+    card.querySelector('.sched-table').innerHTML = '<thead><tr><th>Year</th><th class="num">Paid to loan</th><th class="num">Interest</th><th class="num">Principal</th><th class="num">Balance at end</th></tr></thead><tbody>'
+      + yrs.map((y) => `<tr><td>${y.year}</td><td class="num">${fmt(y.paid)}</td><td class="num">${fmt(y.interest)}</td><td class="num">${fmt(y.principal)}</td><td class="num">${fmt(y.endBalance)}</td></tr>`).join('') + '</tbody>';
+    card.querySelector('.sched summary').textContent = `Year-by-year schedule${changed ? ', paying more' : ''}`;
+  };
+  card.redraw = update;
+  const sched = card.querySelector('details.sched');
+  sched.open = schedOpen.has(l.id);
+  sched.addEventListener('toggle', () => { if (sched.open) schedOpen.add(l.id); else schedOpen.delete(l.id); });
+  const range = card.querySelector('.extra-range'), num = card.querySelector('.extra-num');
+  range.addEventListener('input', () => { num.value = range.value; update(); });
+  num.addEventListener('input', () => { range.value = Math.min(Number(num.value) || 0, maxExtra); update(); });
+  card.querySelector('.lump-num').addEventListener('input', update);
+  update();
+}
+
+function monthsBetween(a, b) {
+  const [ay, am] = a.split('-').map(Number), [by, bm] = b.split('-').map(Number);
+  return (by - ay) * 12 + (bm - am);
+}
+
+// Balance over time: the current plan and, when changed, paying more.
+function loanChart(el, c, showMore) {
+  el.innerHTML = '';
+  const base = c.base.rows, more = showMore ? c.more.rows : [];
+  if (!base.length) return;
+  const n = Math.max(base.length, more.length);
+  const W = Math.max(320, el.clientWidth || 800), H = 220, L = 60, R = 12, T = 10, B = 26;
+  const top = niceTicks(0, base[0].balance + base[0].principal).at(-1);
+  const ticks = niceTicks(0, top);
+  const x = (i) => L + (i / Math.max(1, n)) * (W - L - R);
+  const y = (v) => T + (1 - v / ticks.at(-1)) * (H - T - B);
+  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Loan balance until ${monthLabel(c.base.lastMonth)}` }, el);
+  for (const tv of ticks) {
+    svg('line', { x1: L, x2: W - R, y1: y(tv), y2: y(tv), class: tv === 0 ? 'baseline' : 'gridline' }, root);
+    svg('text', { x: L - 8, y: y(tv) + 4, 'text-anchor': 'end' }, root).textContent = compact(tv);
+  }
+  const firstYear = Number(base[0].month.slice(0, 4));
+  const lastYear = Number(base.at(-1).month.slice(0, 4));
+  const stepY = Math.max(1, Math.ceil((lastYear - firstYear) / Math.max(2, Math.floor((W - L) / 70))));
+  for (let yr = firstYear + 1; yr <= lastYear; yr += stepY) {
+    const i = base.findIndex((r) => r.month === `${yr}-01`);
+    if (i > 0) svg('text', { x: x(i), y: H - 8, 'text-anchor': 'middle' }, root).textContent = yr;
+  }
+  const start = { balance: base[0].balance + base[0].principal };
+  const path = (rows) => [start, ...rows].map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(r.balance).toFixed(1)}`).join('');
+  svg('path', { d: path(base), fill: 'none', stroke: 'var(--s1)', 'stroke-width': 2, 'stroke-linejoin': 'round' }, root);
+  if (more.length) svg('path', { d: path(more), fill: 'none', stroke: 'var(--s3)', 'stroke-width': 2, 'stroke-linejoin': 'round' }, root);
+  const cross = svg('line', { y1: T, y2: H - B, class: 'cross', visibility: 'hidden' }, root);
+  const hit = svg('rect', { x: L, y: 0, width: W - L - R, height: H, fill: 'transparent' }, root);
+  const move = (ev) => {
+    const box = root.getBoundingClientRect();
+    const i = Math.max(1, Math.min(n, Math.round((((ev.clientX - box.left) / box.width) * W - L) / (W - L - R) * n)));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+    const b = base[i - 1], m = more[i - 1];
+    const month = (b || m).month;
+    showTip(`<div class="t">${monthLabel(month)}</div>
+      <div class="r"><span><i style="background:var(--s1)"></i>Current payment</span><b>${b ? fmt(b.balance) : 'Paid off'}</b></div>
+      ${more.length ? `<div class="r"><span><i style="background:var(--s3)"></i>Paying more</span><b>${m ? fmt(m.balance) : 'Paid off'}</b></div>` : ''}`, ev);
+  };
+  hit.addEventListener('pointermove', move);
+  hit.addEventListener('pointerdown', move);
+  hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
+}
+
+let loanAccount = null;
+
+function openLoan(a) {
+  loanAccount = a;
+  const ln = a.loan || {};
+  $('loanTitle').textContent = `${a.name}: loan details`;
+  $('lRate').value = ln.rate ?? '';
+  $('lPayment').value = ln.payment ?? '';
+  $('lEscrow').value = ln.escrow ?? '';
+  $('lOriginal').value = ln.original ?? '';
+  $('lTerm').value = ln.termYears ?? '';
+  $('lFirst').value = ln.firstPayment ?? '';
+  $('lRemove').hidden = !a.loan;
+  $('lError').textContent = '';
+  loanHelp();
+  $('loanDlg').showModal();
+}
+
+// With the original loan filled in, say what the escrow probably is.
+function loanHelp() {
+  const num = (id) => Number(String($(id).value).replace(/[$,%\s]/g, ''));
+  const rate = num('lRate'), original = num('lOriginal'), term = num('lTerm'), payment = num('lPayment');
+  const help = $('lHelp');
+  if (!(rate >= 0 && original > 0 && term > 0)) { help.innerHTML = '<span class="muted">With these, FinTrack shows your original payoff date, and can work out the escrow from your payment.</span>'; return; }
+  const pi = scheduledPayment(original, rate, Math.round(term * 12));
+  const guess = payment > pi ? Math.round((payment - pi) * 100) / 100 : null;
+  help.innerHTML = `Scheduled principal and interest: <b>${fmtCents(pi)}</b>.${guess != null ? ` So escrow is probably about <b>${fmtCents(guess)}</b> <button type="button" class="linkish" id="lUseGuess">Use it</button>` : ''}`;
+  $('lUseGuess')?.addEventListener('click', () => { $('lEscrow').value = guess; });
+}
+
+$('loanForm').addEventListener('input', loanHelp);
+$('lCancel').addEventListener('click', () => $('loanDlg').close());
+$('lRemove').addEventListener('click', async () => {
+  if (!confirm('Remove the loan details? The balance keeps syncing.')) return;
+  await act(() => api(`/api/accounts/${encodeURIComponent(loanAccount.id)}/loan`, { method: 'PUT', body: JSON.stringify({ loan: null }) }));
+  $('loanDlg').close();
+});
+$('loanForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const loan = { rate: $('lRate').value, payment: $('lPayment').value, escrow: $('lEscrow').value, original: $('lOriginal').value, termYears: $('lTerm').value, firstPayment: $('lFirst').value };
+  try {
+    await api(`/api/accounts/${encodeURIComponent(loanAccount.id)}/loan`, { method: 'PUT', body: JSON.stringify({ loan }) });
+    $('loanDlg').close();
+    await load();
+  } catch (err) { $('lError').textContent = err.message; }
+});
+$('loans').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-act="loan"]');
+  if (!b) return;
+  const a = data.accounts.find((x) => x.id === b.closest('[data-id]').dataset.id);
+  if (a) openLoan(a);
 });
 
 // ---------- 401(k) by holdings ----------
@@ -565,6 +774,6 @@ $('importFile').addEventListener('change', async () => {
 });
 
 let resizeTimer;
-addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => data && (renderNetWorthChart(), renderCashFlow()), 150); });
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => data && (renderNetWorthChart(), renderCashFlow(), document.querySelectorAll('.loan-card').forEach((c) => c.redraw?.())), 150); });
 setInterval(load, 5 * 60 * 1000);
 load();

@@ -2,6 +2,7 @@
 
 import { CATEGORIES, CATEGORY_ORDER, kindOf, signedValue } from './classify.js';
 import { dayKey } from './store.js';
+import { loanSummary } from './loans.js';
 
 const DAY = 86400000;
 const FLOW_CATEGORIES = new Set(['cash', 'creditCard']);
@@ -40,6 +41,9 @@ export function computeSummary(state, now = new Date()) {
   for (const a of accounts) a.change30 = accountChange(state.snapshots, a.id, a.value, dayKey(new Date(now.getTime() - 30 * DAY)));
 
   const flows = cashFlow(state, now);
+  const loans = visible.filter((a) => a.kind === 'liability' && a.loan)
+    .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category) || Math.abs(b.value) - Math.abs(a.value))
+    .map((a) => loanFor(state, a, now));
 
   return {
     generatedAt: now.toISOString(),
@@ -68,6 +72,7 @@ export function computeSummary(state, now = new Date()) {
     cashFlow: flows.months,
     transactions: flows.recent,
     holdings: topHoldings(visible),
+    loans,
     categories: CATEGORY_ORDER.map((id) => ({ id, ...CATEGORIES[id] })),
   };
 }
@@ -145,6 +150,30 @@ export function cashFlow(state, now = new Date(), months = 12) {
     account: state.accounts[t.accountId].displayName || state.accounts[t.accountId].name,
   }));
   return { months: buckets.filter((b) => b.month >= firstMonth), recent };
+}
+
+// A loan's numbers. This year's interest and principal are real when FinTrack
+// has the balance from Jan 1 (and so the payments since); else estimated.
+function loanFor(state, a, now) {
+  const today = dayKey(now);
+  const jan1 = `${today.slice(0, 4)}-01-01`;
+  let startOfYear = null;
+  for (const date of Object.keys(state.snapshots).sort()) {
+    if (date > jan1) break;
+    if (a.id in state.snapshots[date]) startOfYear = Math.abs(state.snapshots[date][a.id]);
+  }
+  // The payments only count if FinTrack holds this account's transactions
+  // from the start of the year (SimpleFIN's first sync reaches back 90 days).
+  const txs = Object.values(state.transactions).filter((t) => t.accountId === a.id && !t.pending);
+  const earliest = txs.reduce((m, t) => ((t.posted || '9') < m ? t.posted : m), '9');
+  let paidThisYear = null, payments = null;
+  if (startOfYear != null && earliest.slice(0, 10) <= `${today.slice(0, 4)}-01-15`) {
+    const thisYear = txs.filter((t) => t.amount > 0 && (t.posted || '').slice(0, 10) >= jan1);
+    paidThisYear = thisYear.reduce((s, t) => s + t.amount, 0);
+    payments = thisYear.length;
+  }
+  const balance = Math.abs(a.value);
+  return { id: a.id, name: a.name, org: a.org, category: a.category, balance, loan: a.loan, ...loanSummary(a.loan, balance, today, { startOfYear, paidThisYear, payments }) };
 }
 
 export function findTransfers(txs) {

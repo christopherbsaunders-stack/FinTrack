@@ -53,6 +53,8 @@ export function demoState(now = new Date()) {
       displayName: null, hidden: false, firstSeen: now.toISOString(), lastSeen: now.toISOString(),
     };
   }
+  state.accounts.mtg.loan = { rate: 6.25, payment: 2310, escrow: 465, original: 312000, termYears: 30, firstPayment: '2023-08' };
+  state.accounts.auto.loan = { rate: 5.9, payment: 489, escrow: 0, original: 26500, termYears: 5, firstPayment: '2024-09' };
   state.accounts.rh.holdings = [
     ['VTI', 'Vanguard Total Stock Market ETF', 7200, 6100], ['AAPL', 'Apple Inc.', 3900, 2650],
     ['NVDA', 'NVIDIA Corp.', 3300, 1500], ['MSFT', 'Microsoft Corp.', 2400, 2150], ['AMZN', 'Amazon.com Inc.', 1600, 1700],

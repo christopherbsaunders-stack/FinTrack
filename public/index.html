@@ -65,6 +65,8 @@
       </section>
     </div>
 
+    <div id="loans"></div>
+
     <section class="card">
       <div class="card-head">
         <h2>Cash flow</h2>
@@ -118,6 +120,34 @@
       <hr>
       <button type="button" id="disconnectBtn" class="danger">Disconnect SimpleFIN</button>
       <p class="muted small">Forgets the access link. Your history stays. To cut access entirely, also delete the connection in SimpleFIN Bridge.</p>
+    </form>
+  </dialog>
+
+ <dialog id="loanDlg">
+    <form id="loanForm">
+      <h2 id="loanTitle">Loan details</h2>
+      <p class="muted small">The balance comes from your lender. These are on your statement or your lender's website.</p>
+      <div class="form-grid">
+        <label>Interest rate (%) <input id="lRate" inputmode="decimal" placeholder="6.125" required></label>
+        <label>Monthly payment, all of it ($) <input id="lPayment" inputmode="decimal" placeholder="2400" required></label>
+        <label>Escrow in that payment ($) <input id="lEscrow" inputmode="decimal" placeholder="Taxes, insurance, PMI"></label>
+      </div>
+      <p class="muted small">Escrow is the part of the payment for property taxes, homeowner's insurance and any PMI. It doesn't pay down the loan. Your statement shows it as "escrow".</p>
+      <fieldset>
+        <legend>Optional: the original loan</legend>
+        <div class="form-grid">
+          <label>Amount borrowed ($) <input id="lOriginal" inputmode="decimal"></label>
+          <label>Term (years) <input id="lTerm" inputmode="decimal" placeholder="30"></label>
+          <label>First payment (month) <input id="lFirst" type="month"></label>
+        </div>
+        <p class="small" id="lHelp"></p>
+      </fieldset>
+      <div id="lError" class="form-error" role="alert"></div>
+      <div class="row">
+        <button type="submit">Save</button>
+        <button type="button" class="ghost" id="lCancel">Cancel</button>
+        <button type="button" class="danger" id="lRemove" hidden>Remove details</button>
+      </div>
     </form>
   </dialog>
 

@@ -80,6 +80,7 @@ export function applyAccountSet(state, { accounts }, now = new Date()) {
       categoryOverride: prev?.categoryOverride || null,
       displayName: prev?.displayName || null,
       hidden: prev?.hidden || false,
+      loan: prev?.loan || null,
       firstSeen: prev?.firstSeen || now.toISOString(),
       lastSeen: now.toISOString(),
     };

@@ -15,7 +15,8 @@ import { syncAll, recordSnapshot, revaluePriced, pricedTickers } from './sync.js
 import { refreshPrices } from './prices.js';
 import { parsePaychexCsv, sharesFromValue } from './priced.js';
 import { computeSummary } from './summary.js';
-import { CATEGORIES } from './classify.js';
+import { CATEGORIES, kindOf } from './classify.js';
+import { validateLoan } from './loans.js';
 import { demoState } from './demo.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -217,6 +218,18 @@ const routes = [
     return { ok: true };
   }],
 
+  // Loan details (rate, payment, escrow, ...) for a debt; null clears them.
+  ['PUT', /^\/api\/accounts\/([^/]+)\/loan$/, async (req, [, rawId]) => {
+    const a = state.accounts[decodeURIComponent(rawId)];
+    if (!a) throw httpError(404, 'No such account.');
+    if (kindOf(a.category) !== 'liability') throw httpError(400, 'Loan details are for debts.');
+    const { loan } = await readJson(req);
+    if (loan === null) a.loan = null;
+    else { try { a.loan = validateLoan(loan || {}); } catch (err) { throw httpError(400, err.message); } }
+    persist();
+    return { ok: true };
+  }],
+
   ['DELETE', /^\/api\/accounts\/([^/]+)$/, async (_req, [, rawId]) => {
     const id = decodeURIComponent(rawId);
     const a = state.accounts[id];
@@ -324,6 +337,8 @@ const server = createServer(async (req, res) => {
       return send(res, 404, { error: 'Not found.' });
     }
     if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed.' });
+    // The dashboard uses the same loan math as the server.
+    if (url.pathname === '/loans.js') return send(res, 200, await readFile(join(ROOT, 'src', 'loans.js')), MIME['.js']);
     const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     if (!/^[\w.-]+$/.test(file) || !MIME[extname(file)]) return send(res, 404, 'Not found', 'text/plain');
     return send(res, 200, await readFile(join(PUBLIC, file)), MIME[extname(file)]);
