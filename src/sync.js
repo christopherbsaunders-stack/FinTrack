@@ -1,12 +1,12 @@
 // Pulls the latest balances and transactions from SimpleFIN into the state
 // and records today's value of every account, so the history builds itself.
 
-import { fetchAccounts } from './simplefin.js';
+import { fetchAccounts, MAX_RANGE_DAYS } from './simplefin.js';
 import { guessCategory, signedValue } from './classify.js';
 import { dayKey } from './store.js';
 
 const DAY = 86400000;
-const FIRST_SYNC_DAYS = 89;    // SimpleFIN Bridge serves up to 90 days per request
+const FIRST_SYNC_DAYS = 89;    // fetched in MAX_RANGE_DAYS pieces
 const OVERLAP_DAYS = 10;       // re-read recent days: pending transactions settle late
 const KEEP_TRANSACTIONS_DAYS = 3 * 365;
 
@@ -18,7 +18,7 @@ export async function syncNow(state, { now = new Date(), fetchImpl } = {}) {
     : new Date(now.getTime() - FIRST_SYNC_DAYS * DAY);
   let result;
   try {
-    result = await fetchAccounts(state.accessUrl, { startDate: since }, fetchImpl);
+    result = await fetchInWindows(state.accessUrl, since, now, fetchImpl);
   } catch (err) {
     state.lastErrors = [err.message];
     throw err;
@@ -27,6 +27,26 @@ export async function syncNow(state, { now = new Date(), fetchImpl } = {}) {
   state.lastSync = now.toISOString();
   state.lastErrors = result.errors;
   return { accounts: result.accounts.length, errors: result.errors };
+}
+
+// One request per MAX_RANGE_DAYS, oldest first. Transactions from every piece
+// are kept; balances come from the newest piece (the last one read).
+export async function fetchInWindows(accessUrl, since, now, fetchImpl) {
+  const step = MAX_RANGE_DAYS * DAY;
+  const byId = new Map();
+  const errors = new Set();
+  for (let start = since.getTime(); start < now.getTime(); start += step) {
+    const end = new Date(Math.min(start + step, now.getTime()));
+    const part = await fetchAccounts(accessUrl, { startDate: new Date(start), endDate: end }, fetchImpl);
+    for (const e of part.errors) errors.add(e);
+    for (const a of part.accounts) {
+      const prev = byId.get(a.id);
+      const txs = new Map((prev?.transactions || []).map((t) => [t.id, t]));
+      for (const t of a.transactions) txs.set(t.id, t);
+      byId.set(a.id, { ...a, transactions: [...txs.values()] });
+    }
+  }
+  return { errors: [...errors], accounts: [...byId.values()] };
 }
 
 export function applyAccountSet(state, { accounts }, now = new Date()) {

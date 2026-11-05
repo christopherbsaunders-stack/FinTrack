@@ -44,18 +44,32 @@ export function splitAccessUrl(accessUrl) {
   return { base, auth };
 }
 
+// SimpleFIN Bridge limits how many days one request may cover (reports say
+// 45, older docs 90), so longer ranges are fetched in pieces (see sync.js).
+export const MAX_RANGE_DAYS = 45;
+
 export async function fetchAccounts(accessUrl, { startDate, endDate, balancesOnly = false } = {}, fetchImpl = fetch) {
   const { base, auth } = splitAccessUrl(accessUrl);
-  const q = new URLSearchParams();
-  if (startDate) q.set('start-date', String(Math.floor(startDate.getTime() / 1000)));
-  if (endDate) q.set('end-date', String(Math.floor(endDate.getTime() / 1000)));
-  if (balancesOnly) q.set('balances-only', '1');
-  q.set('pending', '1');
   const headers = auth ? { Authorization: auth } : {};
-  const res = await fetchImpl(`${base}/accounts?${q}`, { headers });
+  const query = (withPending) => {
+    const q = new URLSearchParams();
+    if (startDate) q.set('start-date', String(Math.floor(startDate.getTime() / 1000)));
+    if (endDate) q.set('end-date', String(Math.floor(endDate.getTime() / 1000)));
+    if (balancesOnly) q.set('balances-only', '1');
+    if (withPending) q.set('pending', '1');
+    return q;
+  };
+  let res = await fetchImpl(`${base}/accounts?${query(true)}`, { headers });
+  // `pending` is optional in the protocol; if the server objects to the
+  // request, try once more without it before giving up.
+  if (res.status === 400) res = await fetchImpl(`${base}/accounts?${query(false)}`, { headers });
   if (res.status === 403) throw new Error('SimpleFIN denied access. The connection may have been revoked: set it up again with a new token.');
   if (res.status === 402) throw new Error('SimpleFIN says payment is required: check your SimpleFIN Bridge subscription.');
-  if (!res.ok) throw new Error(`SimpleFIN request failed: HTTP ${res.status}`);
+  if (!res.ok) {
+    // SimpleFIN explains a refusal in the body; pass that on.
+    const why = (await res.text().catch(() => '')).replace(/\s+/g, ' ').trim().slice(0, 300);
+    throw new Error(`SimpleFIN request failed: HTTP ${res.status}${why ? ` (${why})` : ''}`);
+  }
   return normalizeAccountSet(await res.json());
 }
 

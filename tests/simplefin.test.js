@@ -58,3 +58,12 @@ test('fetchAccounts sends auth and dates, and normalizes the reply', async () =>
 test('normalize copes with an empty reply', () => {
   assert.deepEqual(normalizeAccountSet({}), { errors: [], accounts: [] });
 });
+
+test('a refusal passes on what SimpleFIN said, after a retry without pending', async () => {
+  const urls = [];
+  const fake = async (url) => { urls.push(url); return new Response('Date range too large', { status: 400 }); };
+  await assert.rejects(fetchAccounts('https://u:p@host/simplefin', {}, fake), /HTTP 400 \(Date range too large\)/);
+  assert.equal(urls.length, 2);
+  assert.match(urls[0], /pending=1/);
+  assert.doesNotMatch(urls[1], /pending/);
+});

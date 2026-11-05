@@ -104,3 +104,24 @@ test('loan payments count as money out, not as transfers', () => {
   const oct = computeSummary(s, now).cashFlow.find((m) => m.month === '2026-10');
   assert.equal(oct.out, 2310);
 });
+
+test('the first sync is fetched in pieces of at most 45 days and merged', async () => {
+  const s = emptyState();
+  s.accessUrl = 'https://u:p@host/simplefin';
+  const ranges = [];
+  const fake = async (url) => {
+    const q = new URL(url).searchParams;
+    const start = Number(q.get('start-date')), end = Number(q.get('end-date'));
+    ranges.push([start, end]);
+    const i = ranges.length;
+    return Response.json({ errors: [], accounts: [{ id: 'c', name: 'Checking', org: { name: 'Bank' }, balance: String(100 * i), 'balance-date': end,
+      transactions: [{ id: `t${i}`, posted: end - 3600, amount: '-1', description: `piece ${i}` }] }] });
+  };
+  await syncNow(s, { now, fetchImpl: fake });
+  assert.equal(ranges.length, 2);
+  for (const [a, b] of ranges) assert.ok(b - a <= 45 * 86400, 'piece too long');
+  assert.equal(ranges[0][1], ranges[1][0]);
+  assert.equal(ranges[1][1], Math.floor(now.getTime() / 1000));
+  assert.equal(s.accounts.c.balance, 200, 'balance from the newest piece');
+  assert.deepEqual(Object.keys(s.transactions).sort(), ['t1', 't2']);
+});
