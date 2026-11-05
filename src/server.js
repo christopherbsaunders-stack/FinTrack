@@ -11,10 +11,10 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { loadState, saveState } from './store.js';
 import { claimAccessUrl } from './simplefin.js';
-import { syncAll, recordSnapshot, revaluePriced, pricedTickers, indexSeries, refreshIndexes } from './sync.js';
+import { syncAll, recordSnapshot, revaluePriced, pricedTickers, indexSeries, refreshIndexes, historyNeeds } from './sync.js';
 import { anchor } from './hpi.js';
 import { refreshPrices } from './prices.js';
-import { parsePaychexCsv, sharesFromValue } from './priced.js';
+import { parsePaychexCsv, sharesFromValue, historyFrom } from './priced.js';
 import { computeSummary } from './summary.js';
 import { CATEGORIES, kindOf } from './classify.js';
 import { validateLoan } from './loans.js';
@@ -139,7 +139,7 @@ const routes = [
       balanceDate: now, holdings: [], source: 'priced', category: CATEGORIES[body.category] ? body.category : 'retirement',
       categoryOverride: null, displayName: null, hidden: false, firstSeen: now, lastSeen: now, priced,
     };
-    if (body.csv) importCsv(state.accounts[id], body.csv, body.filename);
+    if (body.csv) { importCsv(state.accounts[id], body.csv, body.filename); await priceHistory(); }
     revaluePriced(state);
     persist();
     return { ok: true, id };
@@ -160,6 +160,7 @@ const routes = [
     const a = pricedAccount(rawId);
     const { csv, filename } = await readJson(req);
     const r = importCsv(a, csv, filename);
+    r.priceErrors = await priceHistory();
     revaluePriced(state);
     persist();
     return { ok: true, ...r };
@@ -374,7 +375,10 @@ async function pricedFromForm(body, prev) {
     asOf,
     positions,
     // Real transactions after the new date still count; older ones are in the new shares.
-    ledger: (prev?.ledger || []).filter((t) => t.date > asOf),
+    // Imported transactions all stay: after the new date they replace
+    // estimates, before it they rebuild the history.
+    ledger: prev?.ledger || [],
+    ranges: prev?.ranges || [],
     coveredUntil: prev?.coveredUntil && prev.coveredUntil > asOf ? prev.coveredUntil : asOf,
     plan: { enabled: Boolean(plan.enabled), amount: Math.max(0, Number(plan.amount) || 0), allocation, schedule },
   };
@@ -384,18 +388,28 @@ function importCsv(account, csv, filename) {
   let parsed;
   try { parsed = parsePaychexCsv(csv, filename); } catch (err) { throw httpError(400, err.message); }
   const p = account.priced;
+  // Every row is kept: after asOf they replace estimates; before it they
+  // rebuild the account's history (working backward from asOf's shares).
   const have = new Set(p.ledger.map((t) => t.key));
-  let added = 0, before = 0;
+  let added = 0, history = 0;
   for (const r of parsed.rows) {
-    if (r.date <= p.asOf) { before++; continue; }
     if (have.has(r.key)) continue;
     p.ledger.push(r);
     have.add(r.key);
     added++;
+    if (r.date <= p.asOf) history++;
   }
   p.ledger.sort((a, b) => a.date.localeCompare(b.date));
+  (p.ranges ||= []).push({ from: parsed.from, to: parsed.to, rows: parsed.rows.length, file: String(filename || '').slice(0, 120) });
   if (parsed.to > p.coveredUntil) p.coveredUntil = parsed.to;
-  return { added, alreadyCounted: before, coveredUntil: p.coveredUntil };
+  return { added, history, from: parsed.from, to: parsed.to, coveredUntil: p.coveredUntil, historyFrom: historyFrom(p) };
+}
+
+// After an import, fetch prices for the funds and days the history needs.
+async function priceHistory() {
+  const errors = await refreshPrices(state, pricedTickers(state), { needFrom: historyNeeds(state) });
+  if (!errors.length) state.lastPriceSync = new Date().toISOString();
+  return errors;
 }
 
 const server = createServer(async (req, res) => {

@@ -5,7 +5,7 @@ import { fetchAccounts, MAX_RANGE_DAYS } from './simplefin.js';
 import { guessCategory, signedValue } from './classify.js';
 import { dayKey } from './store.js';
 import { refreshPrices, fillNames, lacksName } from './prices.js';
-import { valuePriced } from './priced.js';
+import { valuePriced, historyFrom } from './priced.js';
 import { fetchSeries, indexedValue, seriesLabel, staleness } from './hpi.js';
 
 const DAY = 86400000;
@@ -25,7 +25,7 @@ export async function syncAll(state, { now = new Date(), fetchImpl } = {}) {
   if (nameless.length) await fillNames(state, nameless, { now, fetchImpl });
   const tickers = pricedTickers(state);
   if (tickers.length) {
-    out.priceErrors = await refreshPrices(state, tickers, { now, fetchImpl });
+    out.priceErrors = await refreshPrices(state, tickers, { now, fetchImpl, needFrom: historyNeeds(state) });
     state.priceErrors = out.priceErrors;
     state.lastPriceSync = now.toISOString();
   }
@@ -111,8 +111,24 @@ export function pricedTickers(state) {
     if (a.source !== 'priced') continue;
     for (const p of a.priced.positions) set.add(p.ticker);
     for (const t of Object.keys(a.priced.plan?.allocation || {})) set.add(t);
+    // Funds held in the rebuilt history need prices too.
+    const from = historyFrom(a.priced);
+    if (from) for (const t of a.priced.ledger || []) if (t.date >= from) set.add(t.ticker);
   }
   return [...set].sort();
+}
+
+// How far back each fund's prices must go for the rebuilt histories.
+export function historyNeeds(state) {
+  const need = {};
+  for (const a of Object.values(state.accounts)) {
+    if (a.source !== 'priced') continue;
+    const from = historyFrom(a.priced);
+    if (!from) continue;
+    const tickers = new Set([...a.priced.positions.map((p) => p.ticker), ...(a.priced.ledger || []).filter((t) => t.date >= from).map((t) => t.ticker)]);
+    for (const t of tickers) if (!need[t] || from < need[t]) need[t] = from;
+  }
+  return need;
 }
 
 // Value every priced account from its shares and the latest prices, fill in
@@ -160,11 +176,13 @@ export function revaluePriced(state, now = new Date()) {
     a.holdings = v.holdings;
     a.balanceDate = v.priceDate ? `${v.priceDate}T21:00:00.000Z` : a.balanceDate;
     const first = v.series[0], last = v.series.at(-1);
+    const history = v.history;
     a.status = {
       estimates: v.estimates, estimatedSince: v.estimatedSince, waiting: v.waiting, missing: v.missing, priceDate: v.priceDate,
       // For the value vs. money put in chart: one point per trading day since asOf.
       series: v.series.map((p) => ({ date: p.date, value: p.value, invested: p.invested })),
       since: first ? { date: first.date, start: first.value, putIn: last.putIn, market: Math.round((last.value - first.value - last.putIn) * 100) / 100 } : null,
+      history,
     };
     for (const p of v.series) {
       // Only from the first day anything was recorded: earlier, the other

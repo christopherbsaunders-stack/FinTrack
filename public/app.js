@@ -535,13 +535,20 @@ function renderGrowth() {
     const st = a.status, s = st.since;
     const pts = st.series;
     const gain = s.market;
+    const rebuilt = st.history?.from && st.history.from < a.priced.asOf;
     card.querySelector('.growth-sum').innerHTML = `<div class="ytd-row">
       <div>Value<b>${fmt(a.value)}</b></div>
-      <div>Started tracking ${shortDate(s.date)}<b>${fmt(s.start)}</b></div>
+      <div>${rebuilt ? 'Value' : 'Started tracking'} ${longDate(s.date)}<b>${fmt(s.start)}</b></div>
       <div>Put in since<b>${signed(s.putIn)}</b></div>
       <div>From the market since<b class="${cls(gain)}">${signed(gain)}${s.start > 0 ? ` <span class="small">(${gain >= 0 ? '+' : '−'}${Math.abs(gain / (s.start + Math.max(0, s.putIn)) * 100).toFixed(1)}%)</span>` : ''}</b></div>
     </div>`;
-    card.querySelector('.growth-note').textContent = `The chart starts ${longDate(s.date)}, when this account was set up in FinTrack, and adds a point every trading day. Contributions are estimated until you import Paychex transactions; reinvested fund payouts count as market growth, not money put in.`;
+    card.querySelector('.growth-note').textContent = [
+      rebuilt ? `Before ${longDate(a.priced.asOf)} the values are rebuilt from your imported transactions and the funds' daily prices.`
+        : `The chart starts ${longDate(s.date)}, when this account was set up in FinTrack. Import older Paychex transactions (Import transactions) to rebuild its history.`,
+      st.history?.stop ? `It can't go further back: ${st.history.stop}` : '',
+      st.history?.filledPayouts?.length ? `${st.history.filledPayouts.length} fund payout${st.history.filledPayouts.length > 1 ? 's' : ''} weren't listed in the imported files, so FinTrack filled in their reinvestment from the funds' published payouts.` : '',
+      'Contributions after the last import are estimated; reinvested fund payouts count as market growth, not money put in.',
+    ].filter(Boolean).join(' ');
     const chart = card.querySelector('.chart');
     if (pts.length < 2) { chart.innerHTML = '<div class="empty">The chart starts with the next trading day\'s prices.</div>'; continue; }
     twoLineChart(chart, pts);
@@ -566,7 +573,9 @@ function twoLineChart(el, pts) {
   const nx = Math.max(2, Math.min(6, pts.length, Math.floor((W - L) / 90)));
   for (let k = 0; k < nx; k++) {
     const i = Math.round((k / (nx - 1)) * last);
-    svg('text', { x: x(i), y: H - 8, 'text-anchor': k === 0 ? 'start' : k === nx - 1 ? 'end' : 'middle' }, root).textContent = shortDate(pts[i].date);
+    const long = (Date.parse(pts[last].date) - Date.parse(pts[0].date)) / 86400000 > 300;
+    svg('text', { x: x(i), y: H - 8, 'text-anchor': k === 0 ? 'start' : k === nx - 1 ? 'end' : 'middle' }, root).textContent = long
+      ? new Date(`${pts[i].date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : shortDate(pts[i].date);
   }
   const path = (key) => pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join('');
   svg('path', { d: path('invested'), fill: 'none', stroke: 'var(--muted)', 'stroke-width': 2, 'stroke-dasharray': '5 4', 'stroke-linejoin': 'round' }, root);
@@ -1146,7 +1155,12 @@ $('importFile').addEventListener('change', async () => {
   if (!f || !importTarget) return;
   try {
     const r = await post(`/api/priced/${encodeURIComponent(importTarget.id)}/import`, { csv: await f.text(), filename: f.name });
-    alert(`Added ${r.added} transaction${r.added === 1 ? '' : 's'}${r.alreadyCounted ? ` (${r.alreadyCounted} dated ${shortDate(importTarget.priced.asOf)} or earlier were already in your share counts)` : ''}. Exact through ${shortDate(r.coveredUntil)}.`);
+    const lines = [`Added ${r.added} new transaction${r.added === 1 ? '' : 's'} (the file covers ${longDate(r.from)} to ${longDate(r.to)}).`];
+    if (r.historyFrom) lines.push(`History rebuilt back to ${longDate(r.historyFrom)}.`);
+    else if (r.history) lines.push(`To rebuild the history, the imported files need to cover every day from their start up to ${longDate(importTarget.priced.asOf)} without a gap.`);
+    lines.push(`Exact through ${longDate(r.coveredUntil)}.`);
+    if (r.priceErrors?.length) lines.push(`Prices: ${r.priceErrors.join(' ')}`);
+    alert(lines.join('\n'));
     await load();
   } catch (err) { alert(err.message); }
 });

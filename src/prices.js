@@ -66,14 +66,27 @@ export function mergeHistory(prices, h, now = new Date()) {
 }
 
 // Fetch every ticker in use: two years the first time, then the last month.
-export async function refreshPrices(state, tickers, { now = new Date(), fetchImpl } = {}) {
+// `needFrom` ({ ticker: 'YYYY-MM-DD' }) asks for older prices, for a rebuilt
+// 401(k) history: the full history is fetched once for that date.
+export async function refreshPrices(state, tickers, { now = new Date(), fetchImpl, needFrom = {} } = {}) {
   state.prices ||= {};
   const errors = [];
   for (const t of tickers) {
     const have = state.prices[t];
-    const range = have && Object.keys(have.closes).length ? '1mo' : '2y';
+    const days = have ? Object.keys(have.closes).sort() : [];
+    const need = needFrom[t];
+    const older = need && (!days.length || days[0] > addDaysIso(need, 7)) && !(have?.fullFor && have.fullFor <= need);
+    const range = older ? 'max' : days.length ? '1mo' : '2y';
     try {
       mergeHistory(state.prices, await fetchHistory(t, { range }, fetchImpl), now);
+      if (older) {
+        // Keep from a month before what's needed; the full history is decades.
+        const keep = addDaysIso(need, -31);
+        const p = state.prices[t];
+        for (const d of Object.keys(p.closes)) if (d < keep) delete p.closes[d];
+        p.events = p.events.filter((e) => e.date >= keep);
+        p.fullFor = need;
+      }
     } catch (err) {
       state.prices[t] = { ...(have || { ticker: t, closes: {}, events: [] }), error: err.message, failedAt: now.toISOString() };
       errors.push(err.message);
@@ -97,6 +110,8 @@ export function closeOnOrAfter(p, date) {
   for (const [d, c] of Object.entries(p.closes)) if (d >= date && (!best || d < best[0])) best = [d, c];
   return best ? { date: best[0], close: best[1] } : null;
 }
+
+function addDaysIso(s, n) { return new Date(Date.parse(`${s}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10); }
 
 export function daysBetween(a, b) { return Math.round((Date.parse(b) - Date.parse(a)) / DAY); }
 function round(n, d) { const f = 10 ** d; return Math.round(n * f) / f; }

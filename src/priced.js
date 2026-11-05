@@ -66,6 +66,34 @@ export function investDates(schedule, from, to) {
 
 // ---------- valuation ----------
 
+// The close on or before a day, by binary search over each ticker's sorted
+// days (built once per valuation; years of daily prices make a scan slow).
+function priceLookup(prices) {
+  const cache = {};
+  return (ticker, day) => {
+    const p = prices[ticker];
+    if (!p) return null;
+    const keys = (cache[ticker] ||= Object.keys(p.closes).sort());
+    let lo = 0, hi = keys.length - 1, found = -1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (keys[mid] <= day) { found = mid; lo = mid + 1; } else hi = mid - 1; }
+    return found < 0 ? null : { date: keys[found], close: p.closes[keys[found]] };
+  };
+}
+
+// How far back the imported transaction files reach without a gap up to
+// asOf (file date ranges merged), or null when they don't reach asOf.
+export function historyFrom(priced) {
+  const ranges = (priced.ranges || []).filter((r) => r.from && r.to).sort((a, b) => a.from.localeCompare(b.from));
+  let cur = null;
+  const merged = [];
+  for (const r of ranges) {
+    if (cur && r.from <= addDays(cur.to, 1)) { if (r.to > cur.to) cur.to = r.to; }
+    else merged.push(cur = { ...r });
+  }
+  const hit = merged.find((r) => r.from <= priced.asOf && r.to >= priced.asOf);
+  return hit && hit.from < priced.asOf ? hit.from : null;
+}
+
 // Shares, value and a daily value series from asOf to today.
 export function valuePriced(priced, prices, today) {
   const shares = {};
@@ -114,6 +142,7 @@ export function valuePriced(priced, prices, today) {
   events.sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order);
 
   // Walk the trading days from asOf, applying events as they come.
+  const priceAt = priceLookup(prices);
   const days = new Set([priced.asOf, today]);
   for (const t of tickers) for (const d of Object.keys(prices[t]?.closes || {})) if (d >= priced.asOf && d <= today) days.add(d);
   // Each day: the value, and the money put in since asOf (contributions in,
@@ -126,15 +155,24 @@ export function valuePriced(priced, prices, today) {
     let value = 0, complete = true;
     for (const [t, n] of Object.entries(held)) {
       if (!n) continue;
-      const px = closeOnOrBefore(prices[t], day);
+      const px = priceAt(t, day);
       if (!px) { complete = false; continue; }
       value += n * px.close;
     }
     if (complete) series.push({ date: day, value: round(value, 2), putIn: round(putIn, 2) });
   }
-  // "Invested": what the account held at the start plus what's been put in since.
-  const start = series[0]?.value ?? 0;
-  for (const p of series) p.invested = round(start + p.putIn, 2);
+
+  // Before asOf: work backward from asOf's shares, undoing each imported
+  // transaction, as far as the files reach without a gap.
+  const back = backfill(priced, prices, priceAt);
+  // "Invested": what the account held where the series starts, plus the
+  // money put in from then on.
+  const startValue = back.series[0]?.value ?? series[0]?.value ?? 0;
+  for (const p of back.series) p.invested = round(startValue + back.putInTotal - p.after, 2);
+  for (const p of series) p.invested = round(startValue + back.putInTotal + p.putIn, 2);
+  for (const p of back.series) { p.putIn = round(back.putInTotal - p.after, 2); delete p.after; }
+  for (const p of series) p.putIn = round(back.putInTotal + p.putIn, 2);
+  series.unshift(...back.series);
   while (i < events.length) events[i++].apply(held);
 
   const holdings = Object.entries(held).filter(([, n]) => n > 1e-9).map(([ticker, n]) => {
@@ -149,12 +187,79 @@ export function valuePriced(priced, prices, today) {
     value: round(holdings.reduce((s, h) => s + h.value, 0), 2),
     holdings,
     series,
+    history: { requested: back.requested, from: back.series[0]?.date ?? null, stop: back.stop, filledPayouts: back.filledPayouts || [] },
     estimates: estimates.sort((a, b) => a.date.localeCompare(b.date)),
     estimatedSince: covered,
     waiting,
     missing,
     priceDate,
   };
+}
+
+// The account's value on each trading day from historyFrom up to (not
+// including) asOf. Shares at the close of day d are asOf's shares minus every
+// imported transaction after d up to asOf. Stops early, with a reason, where a
+// fund's shares would go negative (a transaction is missing) or a fund has no
+// price that far back.
+function backfill(priced, prices, priceAt) {
+  const from = historyFrom(priced);
+  const out = { series: [], putInTotal: 0, requested: from, stop: null, filledPayouts: [] };
+  if (!from) return out;
+  const rows = (priced.ledger || []).filter((t) => t.date > from && t.date <= priced.asOf);
+  const held = {};
+  for (const p of priced.positions) held[p.ticker] = (held[p.ticker] || 0) + Number(p.shares);
+  const tickers = new Set([...Object.keys(held), ...rows.map((r) => r.ticker)]);
+
+  // Fund payouts with no reinvestment row in the files (some recordkeepers
+  // don't list them): filled in from the fund's published payouts, so the
+  // history doesn't drop off a cliff before each one.
+  const steps = rows.map((r) => ({ date: r.date, row: r }));
+  for (const t of tickers) {
+    for (const e of prices[t]?.events || []) {
+      if (e.type === 'split' || e.date <= from || e.date > priced.asOf) continue;
+      const listed = rows.some((r) => r.ticker === t && r.shares > 0 && !/contribution|transfer|exchange|rollover/i.test(r.kind || '')
+        && r.date >= addDays(e.date, -5) && r.date <= addDays(e.date, 10));
+      const px = priceAt(t, e.date);
+      if (listed || !px || px.date !== e.date) continue;
+      steps.push({ date: e.date, payout: { ticker: t, perShare: e.amount, price: px.close } });
+      out.filledPayouts.push({ ticker: t, date: e.date, perShare: e.amount });
+    }
+  }
+  steps.sort((a, b) => b.date.localeCompare(a.date));
+
+  const days = new Set();
+  for (const t of tickers) for (const d of Object.keys(prices[t]?.closes || {})) if (d >= from && d < priced.asOf) days.add(d);
+  let i = 0, after = 0;           // after: money put in after the current day, up to asOf
+  const pts = [];
+  for (const day of [...days].sort().reverse()) {
+    while (i < steps.length && steps[i].date > day) {
+      const st = steps[i++];
+      if (st.row) {
+        held[st.row.ticker] = (held[st.row.ticker] || 0) - st.row.shares;
+        after += moneyIn(st.row);
+      } else {
+        // Reinvesting multiplied the shares by (1 + payout / price); undo that.
+        const { ticker, perShare, price } = st.payout;
+        held[ticker] = (held[ticker] || 0) / (1 + perShare / price);
+      }
+    }
+    const short = Object.entries(held).find(([, n]) => n < -0.01);
+    if (short) { out.stop = `Before ${day}, ${short[0]} would need fewer than zero shares: a transaction is probably missing from the imported files.`; break; }
+    let value = 0, gap = null;
+    for (const [t, n] of Object.entries(held)) {
+      if (n <= 0.0001) continue;
+      const px = priceAt(t, day);
+      if (!px) { gap = t; break; }
+      value += n * px.close;
+    }
+    if (gap) { out.stop = `There are no prices for ${gap} before ${day}.`; break; }
+    pts.push({ date: day, value: round(value, 2), after });
+  }
+  out.series = pts.reverse();
+  out.putInTotal = out.series.length ? out.series[0].after : 0;
+  const first = out.series[0]?.date;
+  if (first) out.filledPayouts = out.filledPayouts.filter((f) => f.date > first);
+  return out;
 }
 
 // Money put into the account by a transaction: contributions and rollovers in,

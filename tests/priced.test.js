@@ -177,3 +177,76 @@ test('value vs money put in: contributions count, payouts and price moves are ma
   const w = valuePriced({ ...priced, ledger, plan: { enabled: false } }, PRICES, '2026-11-05');
   assert.equal(w.series.at(-1).putIn, 102);
 });
+
+import { historyFrom } from '../src/priced.js';
+
+test('history reaches back only as far as the files cover without a gap', () => {
+  const base = { asOf: '2026-11-04' };
+  assert.equal(historyFrom({ ...base, ranges: [{ from: '2025-01-01', to: '2026-11-05' }] }), '2025-01-01');
+  assert.equal(historyFrom({ ...base, ranges: [{ from: '2025-01-01', to: '2025-12-31' }, { from: '2026-01-01', to: '2026-11-05' }] }), '2025-01-01');
+  assert.equal(historyFrom({ ...base, ranges: [{ from: '2025-01-01', to: '2025-06-30' }, { from: '2025-08-01', to: '2026-11-05' }] }), '2025-08-01', 'a gap in July');
+  assert.equal(historyFrom({ ...base, ranges: [{ from: '2025-01-01', to: '2026-10-31' }] }), null, "doesn't reach asOf");
+  assert.equal(historyFrom({ ...base, ranges: [] }), null);
+});
+
+// Prices for a rebuilt history: three trading days in October, then asOf.
+const HIST = {
+  AAA: { closes: { '2026-10-01': 9, '2026-10-02': 9.5, '2026-10-05': 10, '2026-11-04': 10, '2026-11-05': 10 }, events: [] },
+  BBB: { closes: { '2026-10-01': 20, '2026-10-02': 20, '2026-10-05': 20, '2026-11-04': 20, '2026-11-05': 20 }, events: [] },
+};
+
+test('the history is rebuilt backward from asOf, undoing each transaction', () => {
+  const ledger = [
+    // Oct 2: a $100 contribution buys 10 shares of AAA at 10 (price from the file).
+    { key: '1', date: '2026-10-02', ticker: 'AAA', shares: 10, amount: 100, kind: 'Employee Pre-Tax Contribution' },
+    // Oct 5: exchange 5 shares of BBB into AAA; a reinvested dividend of 1 share of BBB.
+    { key: '2', date: '2026-10-05', ticker: 'BBB', shares: -5, amount: -100, kind: 'Fund Transfer Out' },
+    { key: '3', date: '2026-10-05', ticker: 'AAA', shares: 10, amount: 100, kind: 'Fund Transfer In' },
+    { key: '4', date: '2026-10-05', ticker: 'BBB', shares: 1, amount: 20, kind: 'Dividend' },
+  ];
+  const priced = { asOf: '2026-11-04', positions: [{ ticker: 'AAA', shares: 100 }, { ticker: 'BBB', shares: 50 }], ledger, ranges: [{ from: '2026-10-01', to: '2026-11-05' }], coveredUntil: '2026-11-05', plan: { enabled: false } };
+  const v = valuePriced(priced, HIST, '2026-11-05');
+  const at = Object.fromEntries(v.series.map((p) => [p.date, p]));
+  // Oct 5 close: everything up to asOf already happened, so asOf's shares.
+  assert.equal(at['2026-10-05'].value, 100 * 10 + 50 * 20);
+  // Oct 2 close: before Oct 5's exchange and dividend: AAA 90, BBB 54.
+  assert.equal(at['2026-10-02'].value, 90 * 9.5 + 54 * 20);
+  // Oct 1 close: before Oct 2's contribution: AAA 80.
+  assert.equal(at['2026-10-01'].value, 80 * 9 + 54 * 20);
+  assert.equal(v.history.from, '2026-10-01');
+  assert.equal(v.history.stop, null);
+  // Money put in: only the contribution; the exchange and the dividend aren't.
+  assert.equal(at['2026-10-01'].putIn, 0);
+  assert.equal(at['2026-10-02'].putIn, 100);
+  assert.equal(at['2026-11-05'].putIn, 100);
+  assert.equal(at['2026-11-05'].invested, at['2026-10-01'].value + 100);
+});
+
+test('a missing transaction stops the history where shares would go negative', () => {
+  const ledger = [{ key: '1', date: '2026-10-05', ticker: 'AAA', shares: 150, amount: 1500, kind: 'Employee Pre-Tax Contribution' }];
+  const priced = { asOf: '2026-11-04', positions: [{ ticker: 'AAA', shares: 100 }], ledger, ranges: [{ from: '2026-10-01', to: '2026-11-05' }], coveredUntil: '2026-11-05', plan: { enabled: false } };
+  const v = valuePriced(priced, HIST, '2026-11-05');
+  assert.equal(v.series[0].date, '2026-10-05');
+  assert.match(v.history.stop, /AAA would need fewer than zero shares/);
+});
+
+test('a fund without prices that far back stops the history there', () => {
+  const prices = { AAA: { closes: { '2026-10-05': 10, '2026-11-04': 10 }, events: [] } };
+  const priced = { asOf: '2026-11-04', positions: [{ ticker: 'AAA', shares: 1 }], ledger: [], ranges: [{ from: '2026-09-01', to: '2026-11-05' }], coveredUntil: '2026-11-05', plan: { enabled: false } };
+  const v = valuePriced(priced, { ...prices, BBB: HIST.BBB }, '2026-11-04');
+  assert.equal(v.series[0].date, '2026-10-05');
+});
+
+test("a payout the files don't list is filled in from the fund's published payouts", () => {
+  const prices = { AAA: { closes: { '2026-10-01': 10, '2026-10-02': 8, '2026-11-04': 8 }, events: [{ date: '2026-10-02', type: 'capitalGain', amount: 2 }] } };
+  const priced = { asOf: '2026-11-04', positions: [{ ticker: 'AAA', shares: 125 }], ledger: [], ranges: [{ from: '2026-10-01', to: '2026-11-05' }], coveredUntil: '2026-11-05', plan: { enabled: false } };
+  const v = valuePriced(priced, prices, '2026-11-04');
+  assert.deepEqual(v.history.filledPayouts, [{ ticker: 'AAA', date: '2026-10-02', perShare: 2 }]);
+  // 125 shares after the payout were 100 before it (2/8 = 25% more): no cliff.
+  assert.deepEqual(v.series.map((p) => p.value), [1000, 1000, 1000]);
+  // A listed reinvestment is used as is, and nothing is filled in.
+  const withRow = { ...priced, ledger: [{ key: 'd', date: '2026-10-02', ticker: 'AAA', shares: 25, amount: 200, kind: 'Capital Gain Reinvestment' }] };
+  const w = valuePriced(withRow, prices, '2026-11-04');
+  assert.deepEqual(w.history.filledPayouts, []);
+  assert.deepEqual(w.series.map((p) => p.value), [1000, 1000, 1000]);
+});
