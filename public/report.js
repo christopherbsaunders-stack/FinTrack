@@ -153,6 +153,20 @@ function render() {
     parts.push(html);
   }
 
+  // ----- retirement outlook -----
+  const rt = data.retirement;
+  if (rt?.set) {
+    const o = rt.outcomes, st = rt.settings;
+    parts.push(`<section><h2>Retirement outlook</h2>
+      <p>Retiring at <b>${st.retireAge}</b> (age ${rt.age} now) with ${fmt(rt.start)} in retirement savings today and ${fmt(rt.monthly)} a month going in.${st.income ? ` Income wanted: <b>${fmt(st.income)} a month</b> before taxes, ${fmt(st.socialSecurity || 0)} of it from Social Security; the rest needs about <b>${fmt(rt.needed)}</b> saved at a ${st.withdrawalRate}% withdrawal rate.` : ''}</p>
+      <table><thead><tr><th>Market</th><th class="n">Yearly growth after inflation</th><th class="n">Savings at ${st.retireAge}</th><th class="n">Monthly income</th>${st.income ? '<th class="n">Against the goal</th>' : ''}</tr></thead><tbody>
+      ${['poor', 'typical', 'good'].map((k) => `<tr><td>${k[0].toUpperCase() + k.slice(1)}</td><td class="n">${o[k].rate.toFixed(1)}%</td><td class="n">${fmt(o[k].balance)}</td><td class="n">${fmt(o[k].supports)}</td>${st.income ? `<td class="n ${cls(o[k].gap)}">${signed(o[k].gap)}</td>` : ''}</tr>`).join('')}
+      </tbody></table>
+      ${rt.extraNeeded != null || rt.retireAt ? `<p class="note">To close the gap in a typical market: ${[rt.extraNeeded != null ? `save about ${fmt(rt.extraNeeded)} more a month` : '', rt.retireAt ? `retire at ${rt.retireAt}` : ''].filter(Boolean).join(', or ')}.</p>` : ''}
+      ${rt.salaryMultiple ? `<p class="note">Retirement savings are ${rt.salaryMultiple.have.toFixed(1)}× salary; a common rule of thumb at ${rt.age} is about ${rt.salaryMultiple.guide}×.</p>` : ''}
+      <p class="note">All in today's dollars. Typical growth ${rt.typicalFrom === 'entered' ? 'as given by the owner' : `from the investment mix${rt.assumptions.fee ? `, less fund fees of ${rt.assumptions.fee.toFixed(2)}%` : ''}`}; poor and good are ${rt.assumptions.spread} points lower and higher. Contributions assumed to keep pace with pay. A smooth projection, not a forecast: real returns vary year to year.</p></section>`);
+  }
+
   // ----- cash and savings -----
   if (data.buckets.length) {
     const em = data.emergency;

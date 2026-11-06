@@ -23,6 +23,7 @@ import { validateBudget } from './budget.js';
 import { validateSplit, validateTarget } from './mix.js';
 import { exportCsv, EXPORTS } from './export.js';
 import { validateExpenseRatio } from './fees.js';
+import { validateRetirement } from './retirement.js';
 import { demoState } from './demo.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -275,6 +276,14 @@ const routes = [
   ['PUT', /^\/api\/budget$/, async (req) => {
     const { budget } = await readJson(req);
     try { state.settings.budget = validateBudget(budget || {}); } catch (err) { throw httpError(400, err.message); }
+    persist();
+    return { ok: true };
+  }],
+
+  // The retirement projection's inputs; null clears them.
+  ['PUT', /^\/api\/retirement$/, async (req) => {
+    const { retirement } = await readJson(req);
+    try { state.settings.retirement = retirement ? validateRetirement(retirement) : null; } catch (err) { throw httpError(400, err.message); }
     persist();
     return { ok: true };
   }],

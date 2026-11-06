@@ -275,3 +275,7 @@ a.btn-link:hover { border-color: var(--muted); }
 .card.collapsed > :not(.card-head):not(h2) { display: none !important; }
 .card.collapsed > .card-head > :not(h2) { display: none !important; }
 .card.collapsed > h2, .card.collapsed > .card-head { margin-bottom: 0; }
+
+.retire-verdict { font-size: 18px; font-weight: 650; margin: 2px 0 8px; }
+.retire-verdict .sub2 { font-size: 13px; font-weight: 500; color: var(--text-2); }
+.retire-note { font-size: 13px; color: var(--text-2); margin: 6px 0; }

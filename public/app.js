@@ -75,7 +75,7 @@ function showTab() {
   if (data) redrawCharts();
 }
 function redrawCharts() {
-  renderNetWorthChart(); renderCashFlow(); renderGrowth();
+  renderNetWorthChart(); renderCashFlow(); renderGrowth(); renderRetirement();
   document.querySelectorAll('.loan-card').forEach((c) => c.redraw?.());
   applyCollapse();
 }
@@ -163,6 +163,7 @@ function render() {
   renderLoans();
   renderGrowth();
   renderMix();
+  renderRetirement();
   renderFees();
   renderBuckets();
   renderBudget();
@@ -870,6 +871,105 @@ $('mixBody').addEventListener('change', (ev) => {
   const it = data.mix.items.find((i) => i.key === key);
   if (sel.value === 'mixed') { openMix({ key, name: it.symbol || it.name }, it.split); return; }
   act(() => api('/api/mix/class', { method: 'PUT', body: JSON.stringify({ key, split: sel.value || null }) }));
+});
+
+// ---------- retirement outlook ----------
+
+function renderRetirement() {
+  const r = data.retirement;
+  $('retireEdit').textContent = r.set ? 'Edit' : 'Set up';
+  const body = $('retireBody');
+  if (!r.set) {
+    body.innerHTML = `<p class="muted">Are you on track? Enter your birth year, the retirement age and income you're aiming for, and your Social Security estimate. FinTrack projects your retirement accounts (${fmt(r.start)} today${r.planMonthly ? `, plus ${fmt(r.planMonthly)} a month from your 401(k) plan` : ''}) under poor, typical and good markets, and shows what would close any gap.</p>`;
+    return;
+  }
+  const o = r.outcomes, t = o.typical, inc = r.settings.income;
+  let verdict;
+  if (!inc) verdict = `<div class="retire-verdict">At ${r.settings.retireAge}: about ${fmt(t.balance)}</div>`;
+  else if (r.onTrack) verdict = `<div class="retire-verdict up">On track <span class="sub2">in a typical market: ${fmt(t.supports)} a month against the ${fmt(inc)} you want.${o.poor.gap < 0 ? ` In a poor market, about ${fmt(-o.poor.gap)} a month short.` : ' Even a poor market gets there.'}</span></div>`;
+  else verdict = `<div class="retire-verdict down">Short by about ${fmt(-t.gap)} a month <span class="sub2">in a typical market: ${fmt(t.supports)} a month against the ${fmt(inc)} you want.</span></div>`;
+  const fixes = [];
+  if (r.extraNeeded != null) fixes.push(`save about <b>${fmt(r.extraNeeded)} more a month</b>`);
+  if (r.retireAt) fixes.push(`retire at <b>${r.retireAt}</b>`);
+  const sm = r.salaryMultiple;
+  body.innerHTML = `${verdict}
+    ${fixes.length ? `<p class="retire-note">To close the gap in a typical market: ${fixes.join(', or ')}${r.retireAt ? '' : ''}.</p>` : ''}
+    <div class="ytd-row">
+      <div>Retirement savings today<b>${fmt(r.start)}</b></div>
+      <div>Adding each month<b>${fmt(r.monthly)}</b></div>
+      <div>At ${r.settings.retireAge} (typical)<b>${fmt(t.balance)}</b></div>
+      <div>Poor to good market<b>${fmt(o.poor.balance)} – ${fmt(o.good.balance)}</b></div>
+      ${r.needed ? `<div>Needed for your income<b>${fmt(r.needed)}</b></div>` : ''}
+    </div>
+    <div class="legend"><span><i style="background:var(--s1)"></i>Typical</span><span><i class="sq" style="background:var(--s1);opacity:.18"></i>Poor to good</span>${r.needed ? '<span><i class="dash"></i>Needed</span>' : ''}</div>
+    <div class="chart" id="retireChart"></div>
+    <p class="small muted">In today's dollars. Growth after inflation: typical ${r.rates.typical.toFixed(1)}% a year (${r.typicalFrom === 'entered' ? 'your figure' : `from your investment mix: stocks ${r.assumptions.returns.usStocks}%, bonds ${r.assumptions.returns.bonds}%, cash ${r.assumptions.returns.cash}%${r.assumptions.fee ? `, less fund fees of ${r.assumptions.fee.toFixed(2)}%` : ''}`}), poor ${r.rates.poor.toFixed(1)}%, good ${r.rates.good.toFixed(1)}%. Income from savings assumes drawing ${r.settings.withdrawalRate}% of them the first year, plus ${fmt(r.settings.socialSecurity || 0)} of Social Security. Contributions are assumed to keep pace with your pay. Real markets swing far more than these smooth lines; treat this as a guide for your advisor conversation, not a forecast.</p>
+    ${sm ? `<p class="retire-note">Retirement savings are <b>${sm.have.toFixed(1)}×</b> your salary; a common rule of thumb at ${r.age} is about ${sm.guide}×.</p>` : ''}`;
+  retireChart($('retireChart'), r);
+}
+
+// Balance by age: typical as a line, poor to good as a band, the amount needed as a dashed line.
+function retireChart(el, r) {
+  const pts = r.path;
+  if (pts.length < 2) { el.innerHTML = ''; return; }
+  el.innerHTML = '';
+  const W = Math.max(320, el.clientWidth || 800), H = 240, L = 64, R = 12, T = 12, B = 28;
+  const ticks = niceTicks(0, Math.max(pts.at(-1).good, r.needed || 0));
+  const top = ticks.at(-1);
+  const last = pts.length - 1;
+  const x = (i) => L + (i / last) * (W - L - R);
+  const y = (v) => T + (1 - v / top) * (H - T - B);
+  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Typical ${fmt(pts[last].typical)} at age ${pts[last].age}` }, el);
+  for (const tv of ticks) {
+    svg('line', { x1: L, x2: W - R, y1: y(tv), y2: y(tv), class: tv === 0 ? 'baseline' : 'gridline' }, root);
+    svg('text', { x: L - 8, y: y(tv) + 4, 'text-anchor': 'end' }, root).textContent = compact(tv);
+  }
+  const step = Math.max(1, Math.ceil(last / Math.max(2, Math.floor((W - L) / 60))));
+  for (let i = 0; i <= last; i += step) svg('text', { x: x(i), y: H - 8, 'text-anchor': i === 0 ? 'start' : 'middle' }, root).textContent = `${Math.round(pts[i].age)}`;
+  if (last % step) svg('text', { x: x(last), y: H - 8, 'text-anchor': 'end' }, root).textContent = `${Math.round(pts[last].age)}`;
+  const band = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.good).toFixed(1)}`).concat(pts.map((p, i) => `${x(i).toFixed(1)},${y(p.poor).toFixed(1)}`).reverse());
+  svg('path', { d: `M${band.join('L')}Z`, fill: 'var(--s1)', 'fill-opacity': 0.16 }, root);
+  if (r.needed) svg('line', { x1: L, x2: W - R, y1: y(r.needed), y2: y(r.needed), stroke: 'var(--muted)', 'stroke-width': 2, 'stroke-dasharray': '5 4' }, root);
+  svg('path', { d: pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.typical).toFixed(1)}`).join(''), fill: 'none', stroke: 'var(--s1)', 'stroke-width': 2 }, root);
+  const cross = svg('line', { y1: T, y2: H - B, class: 'cross', visibility: 'hidden' }, root);
+  const hit = svg('rect', { x: L, y: 0, width: W - L - R, height: H, fill: 'transparent' }, root);
+  const move = (ev) => {
+    const box = root.getBoundingClientRect();
+    const i = Math.max(0, Math.min(last, Math.round(((((ev.clientX - box.left) / box.width) * W) - L) / (W - L - R) * last)));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+    const p = pts[i];
+    showTip(`<div class="t">Age ${Math.round(p.age)}</div>
+      <div class="r"><span>Good market</span><b>${fmt(p.good)}</b></div>
+      <div class="r"><span><i style="background:var(--s1)"></i>Typical</span><b>${fmt(p.typical)}</b></div>
+      <div class="r"><span>Poor market</span><b>${fmt(p.poor)}</b></div>
+      ${r.needed ? `<div class="r"><span>Needed</span><b>${fmt(r.needed)}</b></div>` : ''}`, ev);
+  };
+  hit.addEventListener('pointermove', move);
+  hit.addEventListener('pointerdown', move);
+  hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
+}
+
+$('retireEdit').addEventListener('click', () => {
+  const s = data.retirement.settings || {};
+  $('rBirth').value = s.birthYear ?? '';
+  $('rAge').value = s.retireAge ?? 65;
+  $('rIncome').value = s.income ?? '';
+  $('rSS').value = s.socialSecurity ?? '';
+  $('rExtra').value = s.extraMonthly ?? '';
+  $('rTaxable').checked = Boolean(s.includeTaxable);
+  $('rReturn').value = s.typicalReturn ?? '';
+  $('rWithdraw').value = s.withdrawalRate ?? 4;
+  const a = data.retirement.assumptions;
+  $('rReturnHint').textContent = `Left empty, the typical return comes from your investment mix (stocks ${a.returns.usStocks}%, bonds ${a.returns.bonds}%, cash ${a.returns.cash}% a year after inflation${a.fee ? `, less your funds' ${a.fee.toFixed(2)}% fees` : ''}); poor and good markets are ${a.spread} points lower and higher. 4% is the common rule of thumb for withdrawals.`;
+  $('rError').textContent = '';
+  $('retireDlg').showModal();
+});
+$('rCancel').addEventListener('click', () => $('retireDlg').close());
+$('retireForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const retirement = { birthYear: $('rBirth').value, retireAge: $('rAge').value, income: $('rIncome').value, socialSecurity: $('rSS').value, extraMonthly: $('rExtra').value, includeTaxable: $('rTaxable').checked, typicalReturn: $('rReturn').value, withdrawalRate: $('rWithdraw').value };
+  try { await api('/api/retirement', { method: 'PUT', body: JSON.stringify({ retirement }) }); $('retireDlg').close(); await load(); }
+  catch (err) { $('rError').textContent = err.message; }
 });
 
 // ---------- what investments cost ----------

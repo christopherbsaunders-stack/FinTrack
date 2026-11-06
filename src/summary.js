@@ -8,6 +8,7 @@ import { splitBuckets, averageSpending, monthsCovered } from './buckets.js';
 import { computeBudget, ratios } from './budget.js';
 import { computeMix } from './mix.js';
 import { computeFees } from './fees.js';
+import { project, typicalReturn, REAL_RETURNS, SPREAD } from './retirement.js';
 
 const DAY = 86400000;
 const FLOW_CATEGORIES = new Set(['cash', 'creditCard']);
@@ -81,6 +82,11 @@ export function computeSummary(state, now = new Date()) {
   const plans = visible.filter((a) => a.source === 'priced' && a.priced?.plan?.enabled);
   const retirementPerYear = plans.length ? Math.round(plans.reduce((s, a) => s + a.priced.plan.amount * (PER_YEAR[a.priced.plan.schedule?.every] || 12), 0) * 100) / 100 : null;
   budget.ratios = ratios(budget, { loanPayments: loans.reduce((s, l) => s + l.payment, 0), retirementPerYear });
+  const mix = computeMix(visible, state.assetClasses || {}, state.settings?.targetMix || null);
+  const fees = computeFees(topHoldings(visible, state.costs || {}, state.names || {}, 1000), state.fees || {}, {
+    ...Object.fromEntries(Object.entries(state.prices || {}).map(([t, p]) => [t, { type: p.type || null }])),
+    ...(state.symbolInfo || {}),
+  });
 
   return {
     generatedAt: now.toISOString(),
@@ -116,11 +122,9 @@ export function computeSummary(state, now = new Date()) {
     buckets: allBuckets,
     emergency,
     budget,
-    mix: computeMix(visible, state.assetClasses || {}, state.settings?.targetMix || null),
-    fees: computeFees(topHoldings(visible, state.costs || {}, state.names || {}, 1000), state.fees || {}, {
-      ...Object.fromEntries(Object.entries(state.prices || {}).map(([t, p]) => [t, { type: p.type || null }])),
-      ...(state.symbolInfo || {}),
-    }),
+    mix,
+    retirement: retirementOutlook(state, visible, mix, fees, retirementPerYear, budget, now),
+    fees,
     categories: CATEGORY_ORDER.map((id) => ({ id, ...CATEGORIES[id] })),
   };
 }
@@ -232,6 +236,36 @@ export function cashFlow(state, now = new Date(), months = 12) {
     account: state.accounts[t.accountId].displayName || state.accounts[t.accountId].name,
   }));
   return { months: buckets.filter((b) => b.month >= firstMonth), recent };
+}
+
+// The retirement projection, from the settings and what FinTrack knows:
+// retirement accounts (and brokerage, if chosen), the 401(k) contribution
+// plans plus other saving, the investment mix and fund fees.
+const SALARY_GUIDE = [[30, 1], [35, 2], [40, 3], [45, 4], [50, 6], [55, 7], [60, 8], [67, 10]];
+function retirementOutlook(state, visible, mix, fees, perYear, budget, now) {
+  const set = state.settings?.retirement || null;
+  const cats = set?.includeTaxable ? ['retirement', 'investments'] : ['retirement'];
+  const start = Math.round(visible.filter((a) => cats.includes(a.category)).reduce((s, a) => s + a.value, 0));
+  const planMonthly = Math.round(((perYear || 0) / 12) * 100) / 100;
+  const out = { set: Boolean(set), settings: set, start, planMonthly, assumptions: { returns: REAL_RETURNS, spread: SPREAD, fee: fees?.weighted ?? null } };
+  if (!set) return out;
+  const age = now.getFullYear() - set.birthYear;
+  const typical = set.typicalReturn ?? typicalReturn(mix, fees?.weighted);
+  out.age = age;
+  out.monthly = Math.round((planMonthly + (set.extraMonthly || 0)) * 100) / 100;
+  out.typicalFrom = set.typicalReturn != null ? 'entered' : 'mix';
+  Object.assign(out, project({ start, monthly: out.monthly, age, retireAge: set.retireAge, income: set.income, socialSecurity: set.socialSecurity, typical, withdrawalRate: set.withdrawalRate }));
+  // Retirement savings as a multiple of salary, against a common rule of thumb for this age.
+  if (budget?.salary > 0) {
+    let guide = null;
+    for (let i = 0; i < SALARY_GUIDE.length; i++) {
+      const [a, m] = SALARY_GUIDE[i], next = SALARY_GUIDE[i + 1];
+      if (age <= a) { guide = i === 0 ? m : SALARY_GUIDE[i - 1][1] + (m - SALARY_GUIDE[i - 1][1]) * ((age - SALARY_GUIDE[i - 1][0]) / (a - SALARY_GUIDE[i - 1][0])); break; }
+      if (!next) guide = m;
+    }
+    out.salaryMultiple = { have: start / budget.salary, guide: Math.round(guide * 10) / 10 };
+  }
+  return out;
 }
 
 // A loan's numbers. This year's interest and principal are real when FinTrack
