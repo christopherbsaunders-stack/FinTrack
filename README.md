@@ -16,6 +16,10 @@ npm start        # your accounts: http://localhost:4600
 npm test
 ```
 
+## Finding your way
+
+The dashboard has five tabs: **Overview** (net worth, its chart, assets and debts), **Investments** (the 401(k) chart, investment mix, holdings), **Savings & budget** (buckets, income and expenses, cash flow), **Loans**, and **Accounts** (every account and recent transactions). The tab is part of the address (`#loans`), so a bookmark or refresh keeps it. Click a card's title (▾) to collapse it; collapsed cards stay collapsed.
+
 ## Connect your accounts (once)
 
 1. Make an account at [bridge.simplefin.org](https://bridge.simplefin.org) (about $15 a year).

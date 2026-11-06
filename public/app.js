@@ -57,6 +57,77 @@ async function load() {
 
 // ---------- render ----------
 
+// ---------- tabs and collapsible cards ----------
+
+const TABS = ['overview', 'investments', 'savings', 'loans', 'accounts'];
+function currentTab() {
+  const h = location.hash.slice(1);
+  if (TABS.includes(h)) return h;
+  try { const t = localStorage.getItem('fintrack.tab'); if (TABS.includes(t)) return t; } catch { /* private window */ }
+  return 'overview';
+}
+function showTab() {
+  const tab = currentTab();
+  for (const t of TABS) $(`tab-${t}`).hidden = t !== tab;
+  for (const a of document.querySelectorAll('.tabs a')) a.setAttribute('aria-selected', String(a.dataset.tab === tab));
+  try { localStorage.setItem('fintrack.tab', tab); } catch { /* private window */ }
+  // Charts measure their width when drawn; draw the ones on this tab now that it's visible.
+  if (data) redrawCharts();
+}
+function redrawCharts() {
+  renderNetWorthChart(); renderCashFlow(); renderGrowth();
+  document.querySelectorAll('.loan-card').forEach((c) => c.redraw?.());
+  applyCollapse();
+}
+addEventListener('hashchange', showTab);
+
+const collapsed = new Set((() => { try { return JSON.parse(localStorage.getItem('fintrack.collapsed') || '[]'); } catch { return []; } })());
+function cardKey(card) {
+  if (card.id) return card.id;
+  if (card.dataset.id) return `${card.classList[1] || 'card'}:${card.dataset.id}`;
+  return card.querySelector('h2')?.textContent.trim();
+}
+// Every card's title becomes a toggle; collapsed ones stay collapsed next time.
+function applyCollapse() {
+  for (const card of document.querySelectorAll('main .card:not(#setup)')) {
+    const h2 = card.querySelector('h2');
+    if (!h2) continue;
+    const key = cardKey(card);
+    h2.classList.add('collapse-toggle');
+    h2.tabIndex = 0;
+    h2.setAttribute('role', 'button');
+    h2.dataset.key = key;
+    const c = collapsed.has(key);
+    card.classList.toggle('collapsed', c);
+    h2.setAttribute('aria-expanded', String(!c));
+  }
+  // A tab with nothing to show says so.
+  for (const t of TABS) {
+    const panel = $(`tab-${t}`);
+    let empty = panel.querySelector(':scope > .panel-empty');
+    const anything = [...panel.querySelectorAll(':scope > .card, :scope > .hero, :scope > .grid2, :scope > div > .card')].some((el) => !el.hidden);
+    if (!anything && !empty) { empty = document.createElement('div'); empty.className = 'panel-empty'; empty.textContent = 'Nothing here yet.'; panel.prepend(empty); }
+    if (empty) empty.hidden = anything;
+  }
+}
+function toggleCard(h2) {
+  const card = h2.closest('.card');
+  const key = h2.dataset.key;
+  if (collapsed.has(key)) collapsed.delete(key); else collapsed.add(key);
+  try { localStorage.setItem('fintrack.collapsed', JSON.stringify([...collapsed])); } catch { /* private window */ }
+  card.classList.toggle('collapsed', collapsed.has(key));
+  h2.setAttribute('aria-expanded', String(!collapsed.has(key)));
+  if (!collapsed.has(key)) redrawCharts();
+}
+document.addEventListener('click', (ev) => {
+  const h2 = ev.target.closest('.collapse-toggle');
+  if (h2 && !ev.target.closest('button, a, select, input')) toggleCard(h2);
+});
+document.addEventListener('keydown', (ev) => {
+  const h2 = ev.target.closest?.('.collapse-toggle');
+  if (h2 && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); toggleCard(h2); }
+});
+
 function render() {
   const t = data.totals;
   $('demoBadge').hidden = !data.demo;
@@ -94,6 +165,8 @@ function render() {
   renderMix();
   renderBuckets();
   renderBudget();
+  $('noLoans').hidden = data.loans.length > 0 || data.accounts.some((a) => !a.hidden && a.category === 'mortgage' && !a.loan);
+  applyCollapse();
   renderTransactions();
 }
 
@@ -1366,6 +1439,7 @@ $('importFile').addEventListener('change', async () => {
 });
 
 let resizeTimer;
-addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => data && (renderNetWorthChart(), renderCashFlow(), renderGrowth(), document.querySelectorAll('.loan-card').forEach((c) => c.redraw?.())), 150); });
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => data && redrawCharts(), 150); });
 setInterval(load, 5 * 60 * 1000);
+showTab();
 load();
