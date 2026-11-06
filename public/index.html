@@ -22,6 +22,7 @@
         <a href="#savings" role="tab" data-tab="savings">Savings &amp; budget</a>
         <a href="#loans" role="tab" data-tab="loans">Loans</a>
         <a href="#accounts" role="tab" data-tab="accounts">Accounts</a>
+      <a href="#protection" role="tab" data-tab="protection">Insurance &amp; estate</a>
       </nav>
   </header>
 
@@ -179,6 +180,33 @@
       </section>
     </div>
 
+    <div class="tab-panel" id="tab-protection" role="tabpanel" aria-label="Insurance and estate" hidden>
+      <section class="card" id="protChecksCard">
+        <h2>Where you stand</h2>
+        <div id="protChecks"></div>
+      </section>
+
+      <section class="card" id="policiesCard">
+        <div class="card-head">
+          <h2>Insurance</h2>
+          <button type="button" class="ghost" id="policyAdd">Add a policy</button>
+        </div>
+        <div id="policiesBody"></div>
+      </section>
+
+      <section class="card" id="docsCard">
+        <h2>Estate documents</h2>
+        <p class="muted small">Where each one is kept matters as much as having it: someone will need to find it.</p>
+        <div class="table-wrap"><table id="docsTable"></table></div>
+      </section>
+
+      <section class="card" id="bensCard">
+        <h2>Beneficiaries</h2>
+        <p class="muted small">Who gets an account or a policy is set by its beneficiary form, not your will, so check each one, and again after a marriage, a birth or a divorce. Your 401(k)'s is on Paychex Flex; brokerages call theirs transfer on death (TOD), and banks payable on death (POD), usually set up online.</p>
+        <div class="table-wrap"><table id="bensTable"></table></div>
+      </section>
+    </div>
+
   </main>
 
   <dialog id="settings">
@@ -292,6 +320,26 @@
       <div class="row">
         <button type="submit">Save</button>
         <button type="button" class="ghost" id="rCancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+ <dialog id="policyDlg">
+    <form id="policyForm">
+      <h2 id="policyTitle">Add a policy</h2>
+      <div class="form-grid">
+        <label>Kind <select id="pType"></select></label>
+        <label>Whose <input id="pWho" maxlength="40" placeholder="Me, my wife, the household"></label>
+        <label>Provider <input id="pProvider" maxlength="80" placeholder="Insurer, or Through work"></label>
+        <label>Coverage ($) <input id="pCoverage" inputmode="decimal" placeholder="Death benefit, or yearly benefit"></label>
+        <label>Premium per year ($) <input id="pPremium" inputmode="decimal" placeholder="Optional"></label>
+      </div>
+      <label class="small"><input type="checkbox" id="pWork"> Through work (it may end if the job does)</label>
+      <div id="polError" class="form-error" role="alert"></div>
+      <div class="row">
+        <button type="submit">Save</button>
+        <button type="button" class="ghost" id="polCancel">Cancel</button>
+        <button type="button" class="danger" id="polDelete" hidden>Delete</button>
       </div>
     </form>
   </dialog>

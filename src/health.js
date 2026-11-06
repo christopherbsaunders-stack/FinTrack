@@ -8,7 +8,7 @@
 const pct = (x) => `${Math.round(x * 100)}%`;
 const money = (x) => `$${Math.round(x).toLocaleString('en-US')}`;
 
-export function healthChecks({ budget, emergency, loans, retirement }) {
+export function healthChecks({ budget, emergency, loans, retirement, protection }) {
   const checks = [];
   const income = budget?.monthlyIncome || null;
 
@@ -72,6 +72,17 @@ export function healthChecks({ budget, emergency, loans, retirement }) {
         note: status === 'good' ? 'On track in poor, typical and good markets.' : status === 'watch' ? `On track in a typical market; about ${money(-o.poor.gap)} a month short in a poor one.` : `Short in a typical market${retirement.extraNeeded != null ? `; about ${money(retirement.extraNeeded)} more a month would close it` : ''}.`,
       });
     } else checks.push({ key: 'outlook', label: 'Retirement outlook', guide: 'On track for the income you want', status: null, missing: 'Add the income you want to the Retirement outlook', tab: 'investments' });
+  }
+  // Insurance and estate, rolled up from that tab's checks.
+  if (protection) {
+    const pc = protection.checks.filter((c) => c.status);
+    if (!protection.entered) checks.push({ key: 'protection', label: 'Insurance and estate', guide: 'Life and disability cover, a will, beneficiaries named', status: null, missing: 'Fill in Insurance & estate', tab: 'protection' });
+    else {
+      const ok = pc.filter((c) => c.status === 'good').length;
+      const status = pc.some((c) => c.status === 'attention') ? 'attention' : pc.some((c) => c.status === 'watch') ? 'watch' : 'good';
+      const gaps = pc.filter((c) => c.status !== 'good').map((c) => c.label.toLowerCase());
+      checks.push({ key: 'protection', label: 'Insurance and estate', value: `${ok} of ${pc.length} in place`, guide: 'Life and disability cover, a will, beneficiaries named', status, note: gaps.length ? `To look at: ${gaps.join(', ')}.` : 'Everything checked is in place.' });
+    }
   }
   return checks;
 }

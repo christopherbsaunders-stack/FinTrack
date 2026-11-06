@@ -18,7 +18,7 @@ npm test
 
 ## Finding your way
 
-The dashboard has five tabs: **Overview** (net worth, its chart, assets and debts), **Investments** (the 401(k) chart, investment mix, holdings), **Savings & budget** (buckets, income and expenses, cash flow), **Loans**, and **Accounts** (every account and recent transactions). The tab is part of the address (`#loans`), so a bookmark or refresh keeps it. Click a card's title (▾) to collapse it; collapsed cards stay collapsed.
+The dashboard has five tabs: **Overview** (net worth, its chart, assets and debts), **Investments** (the 401(k) chart, investment mix, holdings), **Savings & budget** (buckets, income and expenses, cash flow), **Loans**, and **Accounts** (every account and recent transactions), and **Insurance & estate**. The tab is part of the address (`#loans`), so a bookmark or refresh keeps it. Click a card's title (▾) to collapse it; collapsed cards stay collapsed.
 
 ## Connect your accounts (once)
 
@@ -48,6 +48,8 @@ A **value vs. money put in** chart shows the account's value each trading day ag
 - a year-by-year schedule.
 
 **Gains on stocks.** Brokerages send shares and market value (the price shown is value ÷ shares). Robinhood doesn't send what you paid, so its holdings show **Add cost**: enter your average cost per share (in Robinhood: open the stock, "Your average cost") and the Gain column shows the gain and percent from then on, using your current shares. Click the gain to change it when you buy more and the average changes. A cost your brokerage does send always wins.
+
+**Insurance & estate.** Its own tab: list your insurance policies (life, disability, umbrella, and so on: whose, provider, coverage, premium, through work or not), mark each estate document (will, financial and healthcare powers of attorney, healthcare directive, trust) as have, don't have or not sure with the year last reviewed and where it's kept, and say whether each account and life policy has a beneficiary named and when you last checked. FinTrack checks life cover against a common rule of thumb (about 10× income), notes missing disability or umbrella cover, documents or beneficiaries, and flags any not reviewed in three years. It rolls up into one check on the health panel and a section in the advisor report.
 
 **Financial health.** At the top of Overview, the checks advisors make first, each with your number, the usual guide and a status (Good, Watch, Needs attention): savings rate (401(k) with the match, plus what you save elsewhere, against gross income; 15% or more), emergency fund (3 to 6 months of essentials), debt payments (36% of income or less), housing cost (28% or less), retirement savings against salary (a common rule of thumb for your age) and the retirement outlook. Missing numbers link to where they go. The advisor report starts with the same table.
 
@@ -104,6 +106,7 @@ src/sync.js        merge a fetch into the state; record today's value of every a
 src/classify.js    categories (asset or debt) and the guess from an account's name
 src/summary.js     totals, history, cash flow, holdings for the dashboard (pure, tested)
 src/buckets.js     splitting an account into buckets; emergency fund months
+src/protection.js  insurance policies, estate documents, beneficiaries, and their checks
 src/health.js      the financial health checks and their guides
 src/retirement.js  the retirement projection: poor, typical, good; what closes a gap
 src/fees.js        fund expense ratios in dollars, and their cost over the years

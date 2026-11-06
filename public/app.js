@@ -59,7 +59,7 @@ async function load() {
 
 // ---------- tabs and collapsible cards ----------
 
-const TABS = ['overview', 'investments', 'savings', 'loans', 'accounts'];
+const TABS = ['overview', 'investments', 'savings', 'loans', 'accounts', 'protection'];
 function currentTab() {
   const h = location.hash.slice(1);
   if (TABS.includes(h)) return h;
@@ -168,6 +168,7 @@ function render() {
   renderBuckets();
   renderBudget();
   renderHealth();
+  renderProtection();
   $('noLoans').hidden = data.loans.length > 0 || data.accounts.some((a) => !a.hidden && a.category === 'mortgage' && !a.loan);
   applyCollapse();
   renderTransactions();
@@ -877,17 +878,103 @@ $('mixBody').addEventListener('change', (ev) => {
 // ---------- financial health ----------
 
 const STATUS = { good: ['✓', 'Good'], watch: ['!', 'Watch'], attention: ['✕', 'Needs attention'] };
+function checkTiles(list) {
+  return `<div class="health">${list.map((c) => `<div class="check">
+      <div class="check-top"><span class="name">${esc(c.label)}</span>${c.status ? `<span class="status ${c.status}"><i aria-hidden="true">${STATUS[c.status][0]}</i>${STATUS[c.status][1]}</span>` : ''}</div>
+      ${c.status && c.value ? `<div class="val">${esc(c.value)}</div>` : !c.status && c.missing ? `<a class="add" href="#${c.tab}">${esc(c.missing)}</a>` : ''}
+      ${c.guide ? `<div class="guide">Guide: ${esc(c.guide)}</div>` : ''}
+      ${c.note ? `<div class="why">${esc(c.note)}</div>` : ''}
+    </div>`).join('')}</div>`;
+}
+
 function renderHealth() {
   const list = data.health || [];
-  $('healthBody').innerHTML = `<div class="health">${list.map((c) => `<div class="check">
-      <div class="check-top"><span class="name">${esc(c.label)}</span>${c.status ? `<span class="status ${c.status}"><i aria-hidden="true">${STATUS[c.status][0]}</i>${STATUS[c.status][1]}</span>` : ''}</div>
-      ${c.status ? `<div class="val">${esc(c.value)}</div>` : `<a class="add" href="#${c.tab}">${esc(c.missing)}</a>`}
-      <div class="guide">Guide: ${esc(c.guide)}</div>
-      ${c.note ? `<div class="why">${esc(c.note)}</div>` : ''}
-    </div>`).join('')}</div>
+  $('healthBody').innerHTML = `${checkTiles(list)}
     ${list.some((c) => ['dti', 'housing'].includes(c.key) && c.status) && !data.budget.otherIncome ? '<p class="small muted">Debt payments and housing cost are measured against your income only. If those payments are shared, add the other household income under Income and expenses to see household figures.</p>' : ''}
     <p class="small muted">Common rules of thumb advisors start from (CFP Board ratios, the 3 to 6 month emergency fund, savings-to-salary milestones), not verdicts: your situation, and your advisor, may weigh them differently.</p>`;
 }
+
+// ---------- insurance and estate ----------
+
+const POLICY_TYPES = { life: 'Life insurance', disability: 'Disability insurance', umbrella: 'Umbrella liability', longTermCare: 'Long-term care', home: 'Homeowners', auto: 'Auto', health: 'Health', other: 'Other' };
+const YESNO = { have: 'Have', no: "Don't have", unsure: 'Not sure' };
+
+function renderProtection() {
+  const pr = data.protection;
+  $('protChecks').innerHTML = checkTiles(pr.checks.filter((c) => c.status));
+  $('policiesBody').innerHTML = pr.policies.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Kind</th><th>Whose</th><th>Provider</th><th class="num">Coverage</th><th class="num">Premium/yr</th><th></th></tr></thead><tbody>
+      ${pr.policies.map((x) => `<tr><td>${esc(x.label)}${x.work ? '<span class="pending">through work</span>' : ''}</td><td>${esc(x.who)}</td><td>${esc(x.provider)}</td><td class="num">${x.coverage != null ? fmt(x.coverage) : '–'}</td><td class="num">${x.premium != null ? fmt(x.premium) : '–'}</td>
+        <td class="num"><button class="linkish" data-policy="${esc(x.id)}">Edit</button></td></tr>`).join('')}
+      <tr class="group"><td colspan="3">Life insurance, all policies</td><td class="num">${fmt(pr.lifeTotal)}</td><td class="num">${pr.premiums ? fmt(pr.premiums) : ''}</td><td></td></tr></tbody></table></div>
+      ${pr.policies.some((x) => x.work) ? '<p class="small muted">Cover through work usually ends with the job; advisors often suggest some cover of your own.</p>' : ''}`
+    : '<p class="muted">List life, disability and umbrella cover first; those are what an advisor asks about. Home, auto and health are optional here.</p>';
+  $('docsTable').className = 'prot-table';
+  $('docsTable').innerHTML = `<thead><tr><th>Document</th><th>Status</th><th>Last reviewed</th><th>Where it's kept</th></tr></thead><tbody>
+    ${pr.docs.map((d) => `<tr data-doc="${d.key}"><td>${esc(d.label)}<span class="why">${esc(d.why)}</span></td>
+      <td><select data-f="status" aria-label="${esc(d.label)} status"><option value="">–</option>${Object.entries(YESNO).map(([v, l]) => `<option value="${v}"${d.status === v ? ' selected' : ''}>${l}</option>`).join('')}</select></td>
+      <td><input class="yr" data-f="reviewed" inputmode="numeric" placeholder="Year" value="${d.reviewed ?? ''}" aria-label="Year reviewed">${d.stale ? '<span class="stale">review</span>' : ''}</td>
+      <td><input class="where" data-f="where" maxlength="120" placeholder="e.g. Fire safe, lawyer's office" value="${esc(d.where)}" aria-label="Where it's kept"></td></tr>`).join('')}</tbody>`;
+  $('bensTable').className = 'prot-table';
+  $('bensTable').innerHTML = pr.beneficiaries.length
+    ? `<thead><tr><th>Account or policy</th><th>Beneficiary named?</th><th>Last checked</th></tr></thead><tbody>
+      ${pr.beneficiaries.map((b) => `<tr data-ben="${esc(b.key)}"><td>${esc(b.label)}</td>
+        <td><select data-f="named" aria-label="Beneficiary named for ${esc(b.label)}"><option value="">–</option><option value="yes"${b.named === 'yes' ? ' selected' : ''}>Yes</option><option value="no"${b.named === 'no' ? ' selected' : ''}>No</option><option value="unsure"${b.named === 'unsure' ? ' selected' : ''}>Not sure</option></select></td>
+        <td><input class="yr" data-f="checked" inputmode="numeric" placeholder="Year" value="${b.checked ?? ''}" aria-label="Year checked">${b.stale ? '<span class="stale">check again</span>' : ''}</td></tr>`).join('')}</tbody>`
+    : '<tbody><tr><td class="muted">Accounts that take a beneficiary show here once they sync.</td></tr></tbody>';
+}
+
+async function saveProtection(change) {
+  const raw = structuredClone(data.protection.raw);
+  raw.docs ||= {}; raw.beneficiaries ||= {}; raw.policies ||= [];
+  change(raw);
+  await api('/api/protection', { method: 'PUT', body: JSON.stringify({ protection: raw }) });
+  await load();
+}
+// Documents and beneficiaries save as you change them.
+for (const id of ['docsTable', 'bensTable']) {
+  $(id).addEventListener('change', (ev) => {
+    const el = ev.target.closest('[data-f]');
+    if (!el) return;
+    const row = el.closest('tr');
+    const v = el.value.trim();
+    act(() => saveProtection((raw) => {
+      if (row.dataset.doc) (raw.docs[row.dataset.doc] ||= {})[el.dataset.f] = v || null;
+      else (raw.beneficiaries[row.dataset.ben] ||= {})[el.dataset.f] = v || null;
+    }));
+  });
+}
+
+let editingPolicy = null;
+function openPolicy(p = null) {
+  editingPolicy = p;
+  $('policyTitle').textContent = p ? 'Edit policy' : 'Add a policy';
+  $('pType').innerHTML = Object.entries(POLICY_TYPES).map(([v, l]) => `<option value="${v}"${(p?.type || 'life') === v ? ' selected' : ''}>${l}</option>`).join('');
+  $('pWho').value = p?.who ?? ''; $('pProvider').value = p?.provider ?? '';
+  $('pCoverage').value = p?.coverage ?? ''; $('pPremium').value = p?.premium ?? ''; $('pWork').checked = Boolean(p?.work);
+  $('polDelete').hidden = !p;
+  $('polError').textContent = '';
+  $('policyDlg').showModal();
+}
+$('policyAdd').addEventListener('click', () => openPolicy());
+$('policiesBody').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-policy]');
+  if (b) openPolicy(data.protection.raw.policies.find((x) => x.id === b.dataset.policy));
+});
+$('polCancel').addEventListener('click', () => $('policyDlg').close());
+$('polDelete').addEventListener('click', async () => {
+  if (!confirm('Delete this policy?')) return;
+  try { await saveProtection((raw) => { raw.policies = raw.policies.filter((x) => x.id !== editingPolicy.id); delete raw.beneficiaries[`policy:${editingPolicy.id}`]; }); $('policyDlg').close(); }
+  catch (err) { $('polError').textContent = err.message; }
+});
+$('policyForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const x = { id: editingPolicy?.id, type: $('pType').value, who: $('pWho').value, provider: $('pProvider').value, coverage: $('pCoverage').value, premium: $('pPremium').value, work: $('pWork').checked };
+  try {
+    await saveProtection((raw) => { if (editingPolicy) raw.policies = raw.policies.map((p) => (p.id === x.id ? x : p)); else raw.policies.push(x); });
+    $('policyDlg').close();
+  } catch (err) { $('polError').textContent = err.message; }
+});
 
 // ---------- retirement outlook ----------
 

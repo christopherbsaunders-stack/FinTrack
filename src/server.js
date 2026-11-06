@@ -24,6 +24,7 @@ import { validateSplit, validateTarget } from './mix.js';
 import { exportCsv, EXPORTS } from './export.js';
 import { validateExpenseRatio } from './fees.js';
 import { validateRetirement } from './retirement.js';
+import { validateProtection } from './protection.js';
 import { demoState } from './demo.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -276,6 +277,14 @@ const routes = [
   ['PUT', /^\/api\/budget$/, async (req) => {
     const { budget } = await readJson(req);
     try { state.settings.budget = validateBudget(budget || {}); } catch (err) { throw httpError(400, err.message); }
+    persist();
+    return { ok: true };
+  }],
+
+  // Insurance policies, estate documents and beneficiaries.
+  ['PUT', /^\/api\/protection$/, async (req) => {
+    const { protection } = await readJson(req);
+    try { state.settings.protection = validateProtection(protection || {}); } catch (err) { throw httpError(400, err.message); }
     persist();
     return { ok: true };
   }],

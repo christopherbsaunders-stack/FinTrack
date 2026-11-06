@@ -10,6 +10,7 @@ import { computeMix } from './mix.js';
 import { computeFees } from './fees.js';
 import { project, typicalReturn, REAL_RETURNS, SPREAD } from './retirement.js';
 import { healthChecks } from './health.js';
+import { summarizeProtection, emptyProtection } from './protection.js';
 
 const DAY = 86400000;
 const FLOW_CATEGORIES = new Set(['cash', 'creditCard']);
@@ -89,6 +90,7 @@ export function computeSummary(state, now = new Date()) {
     ...(state.symbolInfo || {}),
   });
   const retirement = retirementOutlook(state, visible, mix, fees, retirementPerYear, budget, now);
+  const protection = summarizeProtection(state.settings?.protection, { salary: budget.salary, accounts: visible, thisYear: now.getFullYear() });
 
   return {
     generatedAt: now.toISOString(),
@@ -126,7 +128,8 @@ export function computeSummary(state, now = new Date()) {
     budget,
     mix,
     retirement,
-    health: healthChecks({ budget, emergency, loans, retirement }),
+    health: healthChecks({ budget, emergency, loans, retirement, protection }),
+    protection: { ...protection, raw: state.settings?.protection || emptyProtection() },
     fees,
     categories: CATEGORY_ORDER.map((id) => ({ id, ...CATEGORIES[id] })),
   };

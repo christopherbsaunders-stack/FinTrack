@@ -245,6 +245,23 @@ function render() {
   for (const a of visible.filter((x) => x.source === 'manual' && !x.indexStatus)) caveats.push(`${a.name}: value entered by the owner.`);
   if ((data.errors || []).length) caveats.push(`At the last sync the bank connection reported: ${data.errors.join(' ')}`);
 
+  // ----- insurance and estate -----
+  const pr = data.protection;
+  if (pr?.entered) {
+    const word = { good: '✓ Good', watch: '! Watch', attention: '✕ Needs attention' };
+    const docWord = { have: 'Have', no: "Don't have", unsure: 'Not sure' };
+    parts.push(`<section><h2>Insurance and estate</h2>
+      <table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody>
+      ${pr.checks.filter((c) => c.status).map((c) => `<tr><td>${esc(c.label)}</td><td>${word[c.status]}</td><td class="small">${esc(c.note)}</td></tr>`).join('')}</tbody></table>
+      ${pr.policies.length ? `<h3>Policies</h3><table><thead><tr><th>Kind</th><th>Whose</th><th>Provider</th><th class="n">Coverage</th><th class="n">Premium/yr</th></tr></thead><tbody>
+        ${pr.policies.map((x) => `<tr><td>${esc(x.label)}${x.work ? ' (through work)' : ''}</td><td>${esc(x.who)}</td><td>${esc(x.provider)}</td><td class="n">${x.coverage != null ? fmt(x.coverage) : '–'}</td><td class="n">${x.premium != null ? fmt(x.premium) : '–'}</td></tr>`).join('')}</tbody></table>` : ''}
+      <h3>Estate documents</h3><table><thead><tr><th>Document</th><th>Status</th><th class="n">Reviewed</th><th>Kept</th></tr></thead><tbody>
+        ${pr.docs.map((d) => `<tr><td>${esc(d.label)}</td><td>${d.status ? docWord[d.status] : '–'}</td><td class="n">${d.reviewed ?? '–'}</td><td class="small">${esc(d.where)}</td></tr>`).join('')}</tbody></table>
+      ${pr.beneficiaries.length ? `<h3>Beneficiaries</h3><table><thead><tr><th>Account or policy</th><th>Named</th><th class="n">Checked</th></tr></thead><tbody>
+        ${pr.beneficiaries.map((b) => `<tr><td>${esc(b.label)}</td><td>${{ yes: 'Yes', no: 'No', unsure: 'Not sure' }[b.named] || '–'}</td><td class="n">${b.checked ?? '–'}</td></tr>`).join('')}</tbody></table>` : ''}
+      <p class="note">As listed by the owner. Life cover is compared with a common rule of thumb of about 10× income; actual needs vary.</p></section>`);
+  }
+
   // ----- notes -----
   if (data.report?.notes?.trim()) parts.push(`<section><h2>Notes and questions</h2><div class="notes-text">${esc(data.report.notes)}</div></section>`);
   parts.push(`<section><h2>About these numbers</h2><ul class="caveats">
