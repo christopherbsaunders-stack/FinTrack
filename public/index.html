@@ -219,6 +219,15 @@
         <button value="cancel" class="ghost">Close</button>
       </div>
       <hr>
+      <h3 class="small" style="margin:0 0 6px">Backups</h3>
+      <p class="small" id="backupStatus"></p>
+      <label class="small" style="display:flex;flex-direction:column;gap:4px">Keep backups in this folder (leave empty for the data folder)
+        <input id="backupDir" style="width:100%" placeholder="e.g. C:\Users\you\OneDrive\FinTrack backups">
+      </label>
+      <p class="muted small">A folder that syncs to OneDrive, Dropbox or iCloud keeps a copy off this computer. Backups never include your bank access link; after restoring one, you may need to paste a new SimpleFIN token.</p>
+      <button type="button" class="ghost" id="backupSave">Use this folder</button>
+      <div id="backupError" class="form-error" role="alert"></div>
+      <hr>
       <button type="button" id="disconnectBtn" class="danger">Disconnect SimpleFIN</button>
       <p class="muted small">Forgets the access link. Your history stays. To cut access entirely, also delete the connection in SimpleFIN Bridge.</p>
     </form>

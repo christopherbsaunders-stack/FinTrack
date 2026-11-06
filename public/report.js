@@ -1,5 +1,7 @@
 // The advisor report: everything on the dashboard as a printable summary.
 
+import { compareSnapshots, makeSnapshot, localDay } from './reports.js';
+
 const $ = (id) => document.getElementById(id);
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const usdC = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
@@ -26,6 +28,7 @@ async function load() {
   data = await res.json();
   $('rName').value = data.report?.name || '';
   $('rNotes').value = data.report?.notes || '';
+  fillSince();
   render();
 }
 
@@ -45,7 +48,27 @@ for (const id of ['rName', 'rNotes']) {
     }, 600);
   });
 }
-$('printBtn').addEventListener('click', () => window.print());
+// Printing (the button or Ctrl+P) saves today's numbers, so the next report
+// can say what changed since.
+let saved = false;
+async function saveSnapshot() {
+  if (saved || data?.demo) return;
+  saved = true;
+  try { await fetch('/api/report/snapshot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch { saved = false; }
+}
+addEventListener('beforeprint', saveSnapshot);
+$('printBtn').addEventListener('click', async () => { await saveSnapshot(); window.print(); });
+
+// Which earlier report to compare with: the last one before today, unless picked.
+function fillSince() {
+  const today = localDay(new Date());
+  const earlier = (data.reportHistory || []).filter((x) => x.date < today).reverse();
+  $('rSince').innerHTML = earlier.length
+    ? earlier.map((x, i) => `<option value="${x.date}"${i === 0 ? ' selected' : ''}>Report of ${date(x.date)}</option>`).join('') + '<option value="">Nothing (first report)</option>'
+    : '<option value="">No earlier report yet</option>';
+  $('rSince').disabled = !earlier.length;
+}
+$('rSince').addEventListener('change', () => render());
 
 function render() {
   const t = data.totals;
@@ -73,6 +96,21 @@ function render() {
   const monthlyDebt = data.loans.reduce((s, l) => s + l.payment, 0);
   if (monthlyDebt) figs.push(['Loan payments', `${fmt(monthlyDebt)}/mo`, `${data.loans.length} loan${data.loans.length > 1 ? 's' : ''}, escrow included`]);
   parts.push(`<section><h2>At a glance</h2><div class="figures">${figs.map(([l, v, s, main]) => `<div class="fig${main ? ' main' : ''}"><div class="l">${l}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`).join('')}</div></section>`);
+
+  // ----- since the last report -----
+  const pick = (data.reportHistory || []).find((x) => x.date === $('rSince').value);
+  if (pick) {
+    const c = compareSnapshots(pick, makeSnapshot(data, new Date()));
+    const word = { good: 'Good', watch: 'Watch', attention: 'Needs attention' };
+    parts.push(`<section><h2>Since your last report (${date(c.since)})</h2>
+      <table><thead><tr><th></th><th class="n">${date(c.since)}</th><th class="n">Now</th><th class="n">Change</th></tr></thead><tbody>
+      ${c.rows.map((r) => `<tr${r.key === 'netWorth' ? ' class="cat"' : ''}><td>${esc(r.label)}</td><td class="n">${fmt(r.then)}</td><td class="n">${fmt(r.now)}</td><td class="n ${r.key === 'liabilities' ? cls(-r.change) : cls(r.change)}">${signed(r.change)}</td></tr>`).join('')}
+      ${c.loans.map((l) => `<tr><td>${esc(l.name)} balance</td><td class="n">${fmt(l.then)}</td><td class="n">${fmt(l.now)}</td><td class="n ${cls(l.paidDown)}">${l.paidDown >= 0 ? `${fmt(l.paidDown)} paid down` : `${fmt(-l.paidDown)} more`}</td></tr>`).join('')}
+      ${c.emergency ? `<tr><td>Emergency fund</td><td class="n">${c.emergency.then.toFixed(1)} months</td><td class="n">${c.emergency.now.toFixed(1)} months</td><td class="n ${cls(c.emergency.now - c.emergency.then)}">${c.emergency.now >= c.emergency.then ? '+' : '−'}${Math.abs(c.emergency.now - c.emergency.then).toFixed(1)}</td></tr>` : ''}
+      </tbody></table>
+      ${c.health.length ? `<p class="note">${c.health.map((h) => `${esc(h.label)}: ${word[h.from]} → <b>${word[h.to]}</b> (${esc(h.then || '')} → ${esc(h.now || '')})`).join('; ')}.</p>` : ''}
+      <p class="note">${c.days} days. Totals as FinTrack recorded them on each report date.</p></section>`);
+  }
 
   // ----- financial health -----
   const checks = (data.health || []).filter((c) => c.status);

@@ -11,6 +11,7 @@ import { computeFees } from './fees.js';
 import { project, typicalReturn, REAL_RETURNS, SPREAD } from './retirement.js';
 import { healthChecks } from './health.js';
 import { summarizeProtection, emptyProtection } from './protection.js';
+import { makeSnapshot, compareSnapshots, lastBefore, localDay } from './reports.js';
 
 const DAY = 86400000;
 const FLOW_CATEGORIES = new Set(['cash', 'creditCard']);
@@ -92,7 +93,7 @@ export function computeSummary(state, now = new Date()) {
   const retirement = retirementOutlook(state, visible, mix, fees, retirementPerYear, budget, now);
   const protection = summarizeProtection(state.settings?.protection, { salary: budget.salary, accounts: visible, thisYear: now.getFullYear() });
 
-  return {
+  const out = {
     generatedAt: now.toISOString(),
     connected: Boolean(state.accessUrl),
     lastSync: state.lastSync,
@@ -133,6 +134,11 @@ export function computeSummary(state, now = new Date()) {
     fees,
     categories: CATEGORY_ORDER.map((id) => ({ id, ...CATEGORIES[id] })),
   };
+  // What changed since the last advisor report (one printed before today).
+  const prev = lastBefore(state.reportSnapshots, localDay(now));
+  out.sinceLastReport = prev ? compareSnapshots(prev, makeSnapshot(out, now)) : null;
+  out.reportHistory = (state.reportSnapshots || []).map((x) => x);
+  return out;
 }
 
 // Net worth, assets and debts for every day we have a snapshot, carrying each

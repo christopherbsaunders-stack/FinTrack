@@ -4,10 +4,13 @@
   "private": true,
   "description": "Personal finance dashboard that syncs balances and transactions automatically through SimpleFIN Bridge.",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/server.js",
     "demo": "node src/server.js --demo",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "restore": "node src/restore.js"
   }
 }

@@ -18,7 +18,7 @@
     .toolbar-inner { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
     .toolbar .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .toolbar label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); flex: 1 1 260px; }
-    .toolbar input, .toolbar textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; width: 100%; }
+    .toolbar input, .toolbar textarea, .toolbar select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; width: 100%; }
     .toolbar textarea { min-height: 60px; resize: vertical; }
     button, a.btn { font: inherit; font-weight: 600; font-size: 13px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; text-decoration: none; display: inline-block; }
     a.btn.ghost { background: transparent; color: var(--text); border-color: var(--border); }
@@ -74,6 +74,7 @@
     <div class="toolbar-inner">
       <div class="row">
         <label>Prepared for <input id="rName" maxlength="120" placeholder="Your names, e.g. Chris and Sam Saunders"></label>
+        <label style="flex:0 1 240px">Compare with <select id="rSince"></select></label>
         <button type="button" id="printBtn">Print or save as PDF</button>
         <a class="btn ghost" href="/">Back to dashboard</a>
       </div>

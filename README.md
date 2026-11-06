@@ -63,7 +63,7 @@ A **value vs. money put in** chart shows the account's value each trading day ag
 
 **Income and expenses.** FinTrack only sees money that reaches your tracked accounts, so part of a paycheck sent straight to a joint account, and the bills paid from there, are invisible to it. Under **Income and expenses**, enter your yearly salary (and other household income if you like) and a list of monthly expenses, ticking the essential ones (what would still have to be paid if your income stopped). The first line is your spending in the tracked accounts: measured, or your own figure. The emergency fund shows months of essentials and months of everything; the card and the report show loan payments as a share of income and 401(k) contributions as a share of salary.
 
-**Advisor report.** **Advisor report** (top right) opens a printable summary: net worth and its trend, a balance sheet of every account (with buckets), the 401(k) funds with today's and future allocation, brokerage holdings with gains, savings goals and emergency fund months, each loan (rate, payments, payoff, extra payments), monthly cash flow, your notes and questions, and what's estimated and where each number comes from. Type whose report it is and your notes at the top (they're saved), then **Print or save as PDF**. Spreadsheet (CSV) downloads of accounts, holdings, loans, cash flow and net worth history are linked there too.
+**Advisor report.** **Advisor report** (top right) opens a printable summary, which starts with what changed since your last report (printing one saves that day's numbers; pick an older report to compare with at the top), then: net worth and its trend, a balance sheet of every account (with buckets), the 401(k) funds with today's and future allocation, brokerage holdings with gains, savings goals and emergency fund months, each loan (rate, payments, payoff, extra payments), monthly cash flow, your notes and questions, and what's estimated and where each number comes from. Type whose report it is and your notes at the top (they're saved), then **Print or save as PDF**. Spreadsheet (CSV) downloads of accounts, holdings, loans, cash flow and net worth history are linked there too.
 
 **Home and car values.** Use **Add home, car or other**. For a home, choose **Follow home prices**: your state's FHFA House Price Index (quarterly, from FRED), the US index, or any other FRED series, such as your county's (yearly; Loudoun County, VA is ATNHPIUS51107A). FinTrack remembers the index when you enter the value and scales the value each time a new quarter (or year) comes out; the row shows how far it has moved ("+1.7% since you set it"). When you have a better number (Zillow, Redfin, an appraisal), click **Update value**: it starts following the index again from there. If a series stops being published, the dashboard says so. A car's value you update by hand. The dashboard shows equity (value minus the loan).
 
@@ -78,6 +78,18 @@ HOST=0.0.0.0 FINTRACK_PASSWORD='something long' npm start
 ```
 
 Settings by environment variable: `PORT` (4600), `HOST` (127.0.0.1), `FINTRACK_PASSWORD`, `FINTRACK_DATA` (path of the state file).
+
+## Backups
+
+Once a day FinTrack copies its data file to `data/backups/` (the last 14 days, and the first of each month for two years). Your history can't be rebuilt from the banks, so consider keeping the copies off this computer: in **Settings**, choose a folder that syncs to OneDrive, Dropbox or iCloud (or start FinTrack with `FINTRACK_BACKUP_DIR` set). Backups leave out the SimpleFIN access link, so a copy in a cloud folder can't read your bank data.
+
+To restore one, stop FinTrack and run:
+
+```bash
+npm run restore -- data/backups/fintrack-2026-11-01.json
+```
+
+The current data is saved first (as `before-restore-....json` in `data/backups`). If the current data has a SimpleFIN connection, it's kept; otherwise paste a new setup token after starting FinTrack.
 
 ## Start it at login
 
@@ -106,6 +118,9 @@ src/sync.js        merge a fetch into the state; record today's value of every a
 src/classify.js    categories (asset or debt) and the guess from an account's name
 src/summary.js     totals, history, cash flow, holdings for the dashboard (pure, tested)
 src/buckets.js     splitting an account into buckets; emergency fund months
+src/backup.js      daily backups (without the bank access link) and which to keep
+src/reports.js     report snapshots and what changed since the last one
+src/restore.js     npm run restore -- <backup>
 src/protection.js  insurance policies, estate documents, beneficiaries, and their checks
 src/health.js      the financial health checks and their guides
 src/retirement.js  the retirement projection: poor, typical, good; what closes a gap

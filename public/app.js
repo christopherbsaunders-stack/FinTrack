@@ -144,6 +144,8 @@ function render() {
   const parts = [];
   if (t.change30 != null) parts.push(`<span class="${cls(t.change30)}">${signed(t.change30)}</span> in 30 days`);
   if (t.change365 != null) parts.push(`<span class="${cls(t.change365)}">${signed(t.change365)}</span> in a year`);
+  const since = data.sinceLastReport?.rows.find((r) => r.key === 'netWorth');
+  if (since) parts.push(`<span class="${cls(since.change)}">${signed(since.change)}</span> since your last report (${shortDate(data.sinceLastReport.since)})`);
   $('nwChange').innerHTML = parts.join(' · ') || '<span class="muted">History builds up with each daily sync.</span>';
 
   const tiles = [
@@ -670,7 +672,20 @@ $('showHidden').addEventListener('change', renderAccounts);
 $('txFilter').addEventListener('input', () => { txShown = 25; renderTransactions(); });
 $('txMore').addEventListener('click', () => { txShown += 50; renderTransactions(); });
 
-$('settingsBtn').addEventListener('click', () => { $('syncHours').value = data?.syncHours || 6; $('settings').showModal(); });
+$('settingsBtn').addEventListener('click', () => {
+  $('syncHours').value = data?.syncHours || 6;
+  const b = data?.backups;
+  $('backupStatus').innerHTML = !b?.dir ? 'No backups in the demo.'
+    : `${b.latest ? `Last backup <b>${longDate(b.latest)}</b>, ${b.count} kept` : 'No backup yet'} in <code>${esc(b.dir)}</code>. One a day; the last 14 days and the first of each month for two years are kept.`;
+  $('backupDir').value = b?.chosen || '';
+  $('backupDir').disabled = $('backupSave').disabled = Boolean(b?.fromEnv) || !b?.dir;
+  $('backupError').textContent = b?.error || (b?.fromEnv ? 'Set by FINTRACK_BACKUP_DIR when FinTrack was started.' : '');
+  $('settings').showModal();
+});
+$('backupSave').addEventListener('click', async () => {
+  try { await post('/api/settings', { backupDir: $('backupDir').value }); await load(); $('settingsBtn').click(); }
+  catch (err) { $('backupError').textContent = err.message; }
+});
 $('settingsForm').addEventListener('submit', (ev) => {
   if (ev.submitter?.value === 'save') act(() => post('/api/settings', { syncHours: Number($('syncHours').value) }));
 });

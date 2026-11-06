@@ -6,6 +6,7 @@
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { mkdirSync } from 'node:fs';
 import { join, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
@@ -25,6 +26,9 @@ import { exportCsv, EXPORTS } from './export.js';
 import { validateExpenseRatio } from './fees.js';
 import { validateRetirement } from './retirement.js';
 import { validateProtection } from './protection.js';
+import { backupToday, listBackups } from './backup.js';
+import { makeSnapshot } from './reports.js';
+import { isAbsolute } from 'node:path';
 import { demoState } from './demo.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,9 +45,26 @@ let state = DEMO ? demoState() : loadState(DATA_FILE);
 // dashboard computes from them (the 401(k) chart, home value) shows right
 // after an update, without waiting for the next sync.
 if (!DEMO) { try { revaluePriced(state); } catch (err) { console.error(`[start] ${err.message}`); } }
+if (!DEMO) setTimeout(() => backup(), 0);   // today's backup, once the rest has loaded
 let syncing = null;
 
-function persist() { if (!DEMO) saveState(DATA_FILE, state); }
+// Backups go to FINTRACK_BACKUP_DIR, else the folder chosen in Settings
+// (OneDrive, Dropbox, ... to keep a copy off this computer), else data/backups.
+function backupDir() {
+  return process.env.FINTRACK_BACKUP_DIR || state.settings.backupDir || join(dirname(DATA_FILE), 'backups');
+}
+function backup() {
+  try {
+    const file = backupToday(backupDir(), state);
+    if (file) console.log(`[backup] ${file}`);
+    state.backupError = null;
+  } catch (err) {
+    state.backupError = `Couldn't write a backup to ${backupDir()}: ${err.message}`;
+    console.error(`[backup] ${state.backupError}`);
+  }
+}
+
+function persist() { if (!DEMO) { saveState(DATA_FILE, state); backup(); } }
 
 async function runSync(reason) {
   if (DEMO) return { demo: true };
@@ -114,7 +135,22 @@ function authorized(req) {
 }
 
 const routes = [
-  ['GET', /^\/api\/summary$/, async () => ({ ...computeSummary(state), demo: DEMO, syncing: Boolean(syncing) })],
+  ['GET', /^\/api\/summary$/, async () => {
+    const list = DEMO ? [] : listBackups(backupDir());
+    return {
+      ...computeSummary(state), demo: DEMO, syncing: Boolean(syncing),
+      backups: { dir: DEMO ? null : backupDir(), fromEnv: Boolean(process.env.FINTRACK_BACKUP_DIR), chosen: state.settings.backupDir || null, latest: list.at(-1)?.date ?? null, count: list.length, error: state.backupError || null },
+    };
+  }],
+
+  // Printing the advisor report saves a few numbers, so the next report can
+  // say what changed since. One per day: printing again replaces it.
+  ['POST', /^\/api\/report\/snapshot$/, async () => {
+    const snap = makeSnapshot(computeSummary(state));
+    state.reportSnapshots = [...(state.reportSnapshots || []).filter((x) => x.date !== snap.date), snap].sort((a, b) => a.date.localeCompare(b.date));
+    persist();
+    return { ok: true, date: snap.date };
+  }],
 
   ['POST', /^\/api\/setup$/, async (req) => {
     if (DEMO) throw httpError(400, 'This is the demo. Run `npm start` to connect your own accounts.');
@@ -189,6 +225,16 @@ const routes = [
       state.settings.syncHours = h;
     }
     if ('reportName' in body) state.settings.reportName = String(body.reportName || '').trim().slice(0, 120);
+    if ('backupDir' in body) {
+      const dir = String(body.backupDir || '').trim();
+      if (dir && !isAbsolute(dir)) throw httpError(400, 'Give the whole path of the backup folder, like C:\\Users\\you\\OneDrive\\FinTrack backups.');
+      if (dir) {
+        try { mkdirSync(dir, { recursive: true }); } catch (err) { throw httpError(400, `Can't use that folder: ${err.message}`); }
+      }
+      state.settings.backupDir = dir || null;
+      persist();
+      backup();
+    }
     if ('reportNotes' in body) state.settings.reportNotes = String(body.reportNotes || '').slice(0, 5000);
     persist();
     return { ok: true };
@@ -500,7 +546,7 @@ const server = createServer(async (req, res) => {
     }
     if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed.' });
     // The dashboard uses the same loan and price index code as the server.
-    if (url.pathname === '/loans.js' || url.pathname === '/hpi.js') return send(res, 200, await readFile(join(ROOT, 'src', url.pathname.slice(1))), MIME['.js']);
+    if (['/loans.js', '/hpi.js', '/reports.js'].includes(url.pathname)) return send(res, 200, await readFile(join(ROOT, 'src', url.pathname.slice(1))), MIME['.js']);
     const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     if (!/^[\w.-]+$/.test(file) || !MIME[extname(file)]) return send(res, 404, 'Not found', 'text/plain');
     return send(res, 200, await readFile(join(PUBLIC, file)), MIME[extname(file)]);
