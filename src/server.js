@@ -316,6 +316,18 @@ const routes = [
     return { ok: true };
   }],
 
+  // Mark a payee in the measured spending as essential (or not).
+  ['PUT', /^\/api\/budget\/payee$/, async (req) => {
+    const { key, essential } = await readJson(req);
+    if (!key || String(key).length > 80) throw httpError(400, 'Unknown payee.');
+    const b = state.settings.budget || validateBudget({});
+    const set = new Set(b.essentialPayees || []);
+    if (essential) set.add(String(key)); else set.delete(String(key));
+    state.settings.budget = { ...b, essentialPayees: [...set] };
+    persist();
+    return { ok: true };
+  }],
+
   // What kind of investment a holding (or a whole account) is; null goes back to the guess.
   ['PUT', /^\/api\/mix\/class$/, async (req) => {
     const { key, split } = await readJson(req);
@@ -340,7 +352,9 @@ const routes = [
   // Income and the monthly expense list.
   ['PUT', /^\/api\/budget$/, async (req) => {
     const { budget } = await readJson(req);
-    try { state.settings.budget = validateBudget(budget || {}); } catch (err) { throw httpError(400, err.message); }
+    // The payees marked essential aren't part of the expenses form; keep them.
+    const keep = state.settings.budget?.essentialPayees || [];
+    try { state.settings.budget = validateBudget({ essentialPayees: keep, ...(budget || {}) }); } catch (err) { throw httpError(400, err.message); }
     persist();
     return { ok: true };
   }],

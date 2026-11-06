@@ -208,3 +208,16 @@ test('net worth by type: equity layers that add up to net worth', () => {
   assert.ok(lastDay.debts < 0);
   for (const d of c.days) assert.equal(d.netWorth, Math.round(c.layers.reduce((s, l) => s + d[l.key], 0) * 100) / 100);
 });
+
+test('measured spending names loan payments after the loan, so a line for it is flagged', () => {
+  const s = demoState(now);
+  s.settings.budget = { salary: 100000, expenses: [{ id: 'measured', name: 'My spending in tracked accounts', amount: null, essential: false, measured: true }, { id: 'a', name: 'Auto Loan', amount: 500, essential: true, measured: false }], essentialPayees: [] };
+  const b = computeSummary(s, now).budget;
+  const payees = b.lines[0].payees.map((p) => p.key);
+  assert.ok(payees.includes('PAYMENT AUTO LOAN'), payees.slice(0, 5).join(', '));
+  assert.ok(payees.includes('PAYMENT MORTGAGE'));
+  assert.ok(!payees.some((k) => /TOYOTA/.test(k)), 'named after the loan, not the bank description');
+  assert.equal(b.lines[1].alsoMeasured.key, 'PAYMENT AUTO LOAN');
+  const auto = b.lines[0].payees.find((p) => p.key === 'PAYMENT AUTO LOAN');
+  assert.equal(auto.label, 'TOYOTA FINANCIAL PMT', 'the bank description stays visible');
+});

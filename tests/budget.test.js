@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeBudget, validateBudget, defaultBudget, ratios, MEASURED_NAME } from '../src/budget.js';
+import { computeBudget, validateBudget, defaultBudget, ratios, MEASURED_NAME, payeeKey, spendingByPayee } from '../src/budget.js';
 import { emptyState } from '../src/store.js';
 import { applyAccountSet } from '../src/sync.js';
 import { computeSummary } from '../src/summary.js';
@@ -61,4 +61,32 @@ test('the emergency fund uses the essential lines, and shows everything too', ()
   assert.equal(e.expenses, 2800);
   assert.equal(e.months, 17000 / 2800);
   assert.equal(e.monthsAll, 17000 / 3400);
+});
+
+test('measured spending by payee: what is inside the one number', () => {
+  assert.equal(payeeKey('NETFLIX.COM 866-579-7172 CA'), payeeKey('NETFLIX.COM 866-111-2222 CA'));
+  assert.equal(payeeKey('POS DEBIT SHELL OIL 57444'), 'SHELL OIL');
+  const spent = [
+    { month: '2026-08', description: 'NETFLIX.COM 866-579 CA', amount: 20 }, { month: '2026-09', description: 'NETFLIX.COM 866-579 CA', amount: 20 },
+    { month: '2026-10', description: 'NETFLIX.COM 866-579 CA', amount: 20 },
+    { month: '2026-08', description: 'SHELL OIL 123', amount: 60 }, { month: '2026-09', description: 'SHELL OIL 456', amount: 90 },
+    { month: '2026-11', description: 'SHELL OIL 789', amount: 500 },   // this month: not in the average
+  ];
+  const p = spendingByPayee(spent, ['2026-08', '2026-09', '2026-10']);
+  assert.deepEqual(p.map((x) => [x.key, x.perMonth, x.times]), [['SHELL OIL', 50, 2], ['NETFLIX', 20, 3]]);
+  assert.equal(p.reduce((s, x) => s + x.perMonth, 0), 70, 'adds up to the measured average');
+
+  // Marking a payee essential adds it to the essentials; a line you entered
+  // that's also in the measured spending is flagged.
+  const b = validateBudget({ expenses: [{ measured: true }, { name: 'Netflix', amount: 20 }, { name: 'Joint account: groceries', amount: 400, essential: true }], essentialPayees: ['SHELL OIL'] });
+  const c = computeBudget(b, { amount: 70, months: 3 }, p);
+  assert.equal(c.lines[0].essentialValue, 50);
+  assert.equal(c.essential, 450);
+  assert.equal(c.all, 490);
+  assert.equal(c.lines[1].alsoMeasured.key, 'NETFLIX');
+  assert.equal(c.lines[2].alsoMeasured, null);
+  assert.deepEqual(c.lines[0].payees.map((x) => x.essential), [true, false]);
+  // Your own figure for the line: its checkbox decides, as before.
+  const own = computeBudget(validateBudget({ expenses: [{ measured: true, amount: 100, essential: true }], essentialPayees: ['SHELL OIL'] }), { amount: 70 }, p);
+  assert.equal(own.essential, 100);
 });

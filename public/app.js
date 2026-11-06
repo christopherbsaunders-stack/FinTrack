@@ -1272,16 +1272,50 @@ function renderBudget() {
     </div>` : '';
   $('budgetBody').innerHTML = `${income}
     <table class="budget-table"><thead><tr><th>Monthly expense</th><th class="num">Amount</th><th class="center">Essential</th></tr></thead><tbody>
-      ${lines.map((e) => `<tr><td>${esc(e.name)}${e.measured ? `<span class="sub">${e.source === 'measured' ? `Measured average of the last ${g.measured?.months ?? 0} months` : 'Your figure'}</span>` : ''}</td>
-        <td class="num">${e.value == null ? '–' : fmt(e.value)}</td><td class="center">${e.essential ? 'Yes' : ''}</td></tr>`).join('')}
+      ${lines.map((e) => `<tr><td>${esc(e.name)}${e.measured ? `${infoButton('measured')}<span class="sub">${e.source === 'measured' ? `Measured: everything paid from your tracked checking, savings and cards, averaged over the last ${g.measured?.months ?? 0} months. <a href="#" data-payees>See what's in it</a>` : 'Your figure'}</span>` : ''}
+          ${e.alsoMeasured ? `<span class="sub warn-text">Also in your tracked spending (${esc(e.alsoMeasured.name || titleCase(e.alsoMeasured.key))}, about ${fmt(e.alsoMeasured.perMonth)} a month): remove one so it isn't counted twice.</span>` : ''}</td>
+        <td class="num">${e.value == null ? '–' : fmt(e.value)}</td>
+        <td class="center">${e.measured && e.source === 'measured' && g.essentialPayees?.length ? `Partly<span class="sub">${fmt(e.essentialValue)}</span>` : e.essential ? 'Yes' : ''}</td></tr>`).join('')}
       <tr class="group"><td>Essentials</td><td class="num">${fmt(g.essential)}</td><td></td></tr>
       <tr class="group"><td>Everything</td><td class="num">${fmt(g.all)}</td><td></td></tr>
     </tbody></table>
+    ${payeeDetail(g)}
     ${r.debtToIncome != null || r.retirementRate != null ? `<p class="small muted">${[
       r.debtToIncome != null ? `Loan payments are ${fmt(r.loanPayments)} a month (escrow included), against income before taxes.` : '',
       r.retirementRate != null ? `Into the 401(k) counts your contributions and the employer match, about ${fmt(r.retirementPerYear)} a year.` : '',
     ].filter(Boolean).join(' ')}</p>` : ''}`;
 }
+
+// What's inside the measured spending: each payee, its monthly average, and
+// whether it's essential. Ticking one adds it to the essentials.
+let payeesOpen = false;
+const same = (a, b) => String(a).toUpperCase().replace(/[^A-Z]/g, '') === String(b).toUpperCase().replace(/[^A-Z]/g, '');
+const titleCase = (k) => k.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+function payeeDetail(g) {
+  const m = g.lines.find((e) => e.measured);
+  if (!m || m.source !== 'measured' || !m.payees?.length) return '';
+  const dupes = new Set(g.lines.map((e) => e.alsoMeasured?.key).filter(Boolean));
+  return `<details class="sched payees"${payeesOpen ? ' open' : ''}><summary>What's in your tracked spending (${fmt(m.value)} a month)</summary>
+    <p class="small muted">Everything paid from your tracked accounts in the last ${g.measured.months} full months, by payee, as a monthly average. Tick the essential ones (what you'd still pay if your income stopped): they count toward your essential expenses and the emergency fund. Anything here that you've also listed as its own line is counted twice; remove one.</p>
+    <div class="table-wrap"><table class="payee-table"><thead><tr><th>Paid to</th><th class="num">Times</th><th class="num">Per month</th><th class="center">Essential</th></tr></thead><tbody>
+    ${m.payees.map((p) => `<tr><td>${esc(p.name || titleCase(p.key))}${same(p.label, p.name || p.key) ? '' : `<span class="sub">${esc(p.label)}</span>`}${dupes.has(p.key) ? '<span class="sub warn-text">Also listed as its own line</span>' : ''}</td>
+      <td class="num">${p.times}</td><td class="num">${fmtCents(p.perMonth)}</td>
+      <td class="center"><input type="checkbox" data-payee="${esc(p.key)}"${p.essential ? ' checked' : ''} aria-label="${esc(titleCase(p.key))} is essential"></td></tr>`).join('')}
+    <tr class="group"><td>Total</td><td></td><td class="num">${fmtCents(m.payees.reduce((s, p) => s + p.perMonth, 0))}</td><td class="center">${fmt(m.essentialValue)}</td></tr>
+    </tbody></table></div></details>`;
+}
+$('budgetBody').addEventListener('click', (ev) => {
+  if (!ev.target.closest('[data-payees]')) return;
+  ev.preventDefault();
+  const d = $('budgetBody').querySelector('details.payees');
+  if (d) { d.open = true; payeesOpen = true; d.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+});
+$('budgetBody').addEventListener('toggle', (ev) => { if (ev.target.matches?.('details.payees')) payeesOpen = ev.target.open; }, true);
+$('budgetBody').addEventListener('change', (ev) => {
+  const box = ev.target.closest('input[data-payee]');
+  if (!box) return;
+  act(() => api('/api/budget/payee', { method: 'PUT', body: JSON.stringify({ key: box.dataset.payee, essential: box.checked }) }));
+});
 
 function budgetRow(e = {}) {
   const tr = document.createElement('tr');

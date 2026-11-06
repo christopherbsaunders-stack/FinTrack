@@ -5,7 +5,7 @@ import { dayKey } from './store.js';
 import { loanSummary } from './loans.js';
 import { lacksName } from './prices.js';
 import { splitBuckets, averageSpending, monthsCovered } from './buckets.js';
-import { computeBudget, ratios } from './budget.js';
+import { computeBudget, ratios, spendingByPayee } from './budget.js';
 import { computeMix } from './mix.js';
 import { computeFees } from './fees.js';
 import { project, typicalReturn, REAL_RETURNS, SPREAD } from './retirement.js';
@@ -63,7 +63,7 @@ export function computeSummary(state, now = new Date()) {
   const em = allBuckets.find((b) => b.emergency);
   const thisMonth = dayKey(now).slice(0, 7);
   const measured = averageSpending(flows.months, thisMonth);
-  const budget = computeBudget(state.settings?.budget, measured);
+  const budget = computeBudget(state.settings?.budget, measured, measured ? spendingByPayee(flows.spent, measured.monthsUsed) : []);
   // What the emergency fund has to cover: the essential lines of the expense
   // list once there is one; before that, the amount entered on the fund (the
   // older way), else measured spending.
@@ -225,13 +225,29 @@ export function cashFlow(state, now = new Date(), months = 12) {
     buckets.push({ month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, in: 0, out: 0 });
   }
   const index = new Map(buckets.map((b, i) => [b.month, i]));
+  const spent = [];   // each counted payment out, for the breakdown of measured spending
+  // A payment out that lands on one of your loans (the same amount arriving on
+  // the loan within a few days) is named after the loan: "Payment to Auto Loan".
+  const loanIn = txs.filter((t) => !t.pending && t.amount > 0 && kindOf(state.accounts[t.accountId].category) === 'liability'
+    && !FLOW_CATEGORIES.has(state.accounts[t.accountId].category));
+  const loanFor = (t) => {
+    const m = loanIn.find((x) => Math.abs(x.amount + t.amount) < 0.005 && Math.abs(x.time - t.time) <= TRANSFER_WINDOW_DAYS * DAY);
+    const a = m && state.accounts[m.accountId];
+    return a ? (a.displayName || a.name) : null;
+  };
   for (const t of txs) {
     if (t.pending || transfers.has(t.id)) continue;
     if (!FLOW_CATEGORIES.has(state.accounts[t.accountId].category)) continue;
     const d = new Date(t.time);
-    const i = index.get(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const i = index.get(month);
     if (i == null) continue;
-    if (t.amount >= 0) buckets[i].in += t.amount; else buckets[i].out -= t.amount;
+    if (t.amount >= 0) buckets[i].in += t.amount;
+    else {
+      buckets[i].out -= t.amount;
+      const loan = loanFor(t);
+      spent.push({ month, description: loan ? `Payment to ${loan}` : t.description, label: t.description, amount: -t.amount });
+    }
   }
   for (const b of buckets) { b.in = r2(b.in); b.out = r2(b.out); b.net = r2(b.in - b.out); }
 
@@ -248,7 +264,7 @@ export function cashFlow(state, now = new Date(), months = 12) {
     transfer: transfers.has(t.id),
     account: state.accounts[t.accountId].displayName || state.accounts[t.accountId].name,
   }));
-  return { months: buckets.filter((b) => b.month >= firstMonth), recent };
+  return { months: buckets.filter((b) => b.month >= firstMonth), recent, spent };
 }
 
 // The retirement projection, from the settings and what FinTrack knows:

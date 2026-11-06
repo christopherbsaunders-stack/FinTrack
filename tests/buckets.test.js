@@ -44,7 +44,7 @@ test('input checks', () => {
 
 test('spending average leaves out the current month', () => {
   const months = [{ month: '2026-07', out: 0 }, { month: '2026-08', out: 3000 }, { month: '2026-09', out: 4000 }, { month: '2026-10', out: 5000 }, { month: '2026-11', out: 100 }];
-  assert.deepEqual(averageSpending(months, '2026-11'), { amount: 4000, months: 3 });
+  assert.deepEqual(averageSpending(months, '2026-11'), { amount: 4000, months: 3, monthsUsed: ['2026-08', '2026-09', '2026-10'] });
   assert.equal(averageSpending([], '2026-11'), null);
   assert.equal(monthsCovered(12000, 4000), 3);
   assert.equal(monthsCovered(12000, 0), null);

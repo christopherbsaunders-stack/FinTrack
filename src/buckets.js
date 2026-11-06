@@ -33,7 +33,7 @@ export function monthsCovered(value, monthlyExpenses) {
 export function averageSpending(months, currentMonth, n = 3) {
   const full = months.filter((m) => m.month < currentMonth && m.out > 0).slice(-n);
   if (!full.length) return null;
-  return { amount: round2(full.reduce((s, m) => s + m.out, 0) / full.length), months: full.length };
+  return { amount: round2(full.reduce((s, m) => s + m.out, 0) / full.length), months: full.length, monthsUsed: full.map((m) => m.month) };
 }
 
 export function validateBuckets(input) {

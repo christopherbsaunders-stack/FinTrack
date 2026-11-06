@@ -10,6 +10,8 @@
 //   expenses: [{ id, name, amount, essential, measured }]
 //     measured: the line for spending in the tracked accounts; its amount is
 //               FinTrack's measured average unless you set one (amount != null)
+//   essentialPayees: payees in the measured spending marked essential
+//               (keys from payeeKey), which count toward the essentials
 // }
 
 export const MEASURED_NAME = 'My spending in tracked accounts';
@@ -18,23 +20,73 @@ export function defaultBudget() {
   return { salary: null, otherIncome: null, otherSaving: null, expenses: [{ id: 'measured', name: MEASURED_NAME, amount: null, essential: false, measured: true }] };
 }
 
+// Group a bank description to a payee: "NETFLIX.COM 866-579 CA" and
+// "NETFLIX.COM 866-111 CA" are the same one. Card and processor prefixes go.
+const NOISE = new Set(['POS', 'DEBIT', 'PURCHASE', 'ACH', 'CHECKCARD', 'CHECK', 'CARD', 'VISA', 'SQ', 'TST', 'SP', 'PP', 'WWW', 'COM', 'INC', 'LLC', 'THE', 'RECURRING', 'ONLINE', 'WEB', 'PMT', 'ID', 'REF', 'XX', 'XXX']);
+export function payeeKey(description) {
+  const words = String(description || '').toUpperCase().replace(/[^A-Z&' ]+/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !NOISE.has(w));   // two-letter bits are mostly state codes
+  return words.slice(0, 3).join(' ') || 'OTHER';
+}
+
+// The measured spending by payee, as a monthly average over the same months
+// the measured figure uses, biggest first: what's inside that one number.
+export function spendingByPayee(spent, monthsUsed) {
+  const months = new Set(monthsUsed || []);
+  if (!months.size) return [];
+  const groups = new Map();
+  for (const t of spent || []) {
+    if (!months.has(t.month)) continue;
+    const key = payeeKey(t.description);
+    // name: how it's shown, for a payment named after one of your loans.
+    const g = groups.get(key) || { key, name: t.label && t.label !== t.description ? t.description : null, label: t.label || t.description, total: 0, times: 0 };
+    g.total += t.amount; g.times += 1;
+    groups.set(key, g);
+  }
+  return [...groups.values()].map((g) => ({ key: g.key, name: g.name, label: g.label, times: g.times, perMonth: round2(g.total / months.size) }))
+    .sort((a, b) => b.perMonth - a.perMonth);
+}
+
+// A line you entered that also shows up in the measured spending, by name:
+// "Netflix" and NETFLIX.COM. Short and generic words don't count.
+const GENERIC = new Set(['joint', 'account', 'payment', 'monthly', 'bill', 'bills', 'other', 'home', 'my', 'the', 'and']);
+function alsoMeasured(name, payees) {
+  const words = String(name || '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 4 && !GENERIC.has(w));
+  if (!words.length) return null;
+  return payees.find((p) => words.some((w) => p.key.toLowerCase().split(' ').some((k) => k.startsWith(w) || w.startsWith(k) && k.length >= 4))) || null;
+}
+
 // The lines with their amounts, the essential and full totals, and income.
-export function computeBudget(budget, measured) {
+export function computeBudget(budget, measured, payees = []) {
   const b = budget || defaultBudget();
+  const marked = new Set(b.essentialPayees || []);
+  const detail = payees.map((p) => ({ ...p, essential: marked.has(p.key) }));
   const lines = (b.expenses || []).map((e) => {
     const value = e.measured && e.amount == null ? (measured?.amount ?? null) : e.amount;
-    return { ...e, value, source: e.measured ? (e.amount == null ? 'measured' : 'entered') : 'entered' };
+    const line = { ...e, value, source: e.measured ? (e.amount == null ? 'measured' : 'entered') : 'entered' };
+    if (e.measured) {
+      line.payees = detail;
+      // With payees marked, the essential part of the measured spending is
+      // theirs; with your own figure for the line, its checkbox decides.
+      line.essentialValue = e.amount == null && marked.size
+        ? round2(detail.filter((p) => p.essential).reduce((s, p) => s + p.perMonth, 0))
+        : e.essential ? value : 0;
+    } else {
+      line.essentialValue = e.essential ? value : 0;
+      line.alsoMeasured = alsoMeasured(e.name, detail);
+    }
+    return line;
   });
-  const sum = (list) => round2(list.reduce((s, e) => s + (e.value || 0), 0));
+  const sum = (list, k = 'value') => round2(list.reduce((s, e) => s + (e[k] || 0), 0));
   const yearly = (Number(b.salary) || 0) + (Number(b.otherIncome) || 0);
   const any = lines.some((e) => e.value > 0);
   return {
+    essentialPayees: [...marked],
     salary: b.salary ?? null,
     otherIncome: b.otherIncome ?? null,
     otherSaving: b.otherSaving ?? null,
     monthlyIncome: yearly > 0 ? round2(yearly / 12) : null,
     lines,
-    essential: any ? sum(lines.filter((e) => e.essential)) : null,
+    essential: any ? sum(lines, 'essentialValue') : null,
     all: any ? sum(lines) : null,
     measured: measured || null,
     set: Boolean(budget),
@@ -77,7 +129,8 @@ export function validateBudget(input) {
     expenses.push({ id: measured ? 'measured' : id, name, amount, essential: Boolean(e.essential), measured });
   });
   if (!measuredSeen) expenses.unshift({ id: 'measured', name: MEASURED_NAME, amount: null, essential: false, measured: true });
-  return { salary, otherIncome, otherSaving, expenses };
+  const essentialPayees = [...new Set((Array.isArray(input?.essentialPayees) ? input.essentialPayees : []).map((k) => String(k).slice(0, 80)))].slice(0, 300);
+  return { salary, otherIncome, otherSaving, expenses, essentialPayees };
 }
 
 function round2(x) { return Math.round(x * 100) / 100; }
