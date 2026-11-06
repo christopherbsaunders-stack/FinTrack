@@ -12,6 +12,8 @@
   --s2: #eb6834;   /* debts, money out */
   --s3: #1baf7a;
   --s4: #eda100;
+  --s5: #e87ba4;
+  --s8: #e34948;
   --good: #006300;
   --bad: #b42323;
   --critical: #d03b3b;
@@ -35,6 +37,8 @@
     --s2: #d95926;
     --s3: #199e70;
     --s4: #c98500;
+    --s5: #d55181;
+    --s8: #e66767;
     --good: #4fc24f;
     --bad: #f07070;
     --warning-bg: #3a2f10;
@@ -45,7 +49,7 @@
   color-scheme: dark;
   --bg: #121211; --surface: #1a1a19; --border: #2d2d2a; --grid: #262624;
   --text: #f0efec; --text-2: #c3c2b7; --muted: #93918a; --accent: #3987e5;
-  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --good: #4fc24f; --bad: #f07070;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s8: #e66767; --good: #4fc24f; --bad: #f07070;
   --warning-bg: #3a2f10; --warning-border: #a57c00;
 }
 
@@ -247,3 +251,5 @@ a.btn-link:hover { border-color: var(--muted); }
 .mix-gaps li { margin: 2px 0; }
 .mix-table select { font-size: 12px; padding: 3px 6px; }
 .guess { font-size: 11px; color: var(--muted); margin-left: 6px; }
+.nw-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.legend b { color: var(--text); font-weight: 600; margin-left: 4px; }

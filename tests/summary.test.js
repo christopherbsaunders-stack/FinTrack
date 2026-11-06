@@ -197,3 +197,14 @@ test('a holding without a name gets one looked up, once', async () => {
   assert.equal(by.AMD.description, 'Advanced Micro Devices, Inc.');
   assert.equal(by.HAS.description, 'Hasbro Inc');
 });
+
+test('net worth by type: equity layers that add up to net worth', () => {
+  const r = computeSummary(demoState(now), now);
+  const c = r.composition;
+  assert.deepEqual(c.layers.map((l) => l.key), ['retirement', 'investments', 'cash', 'homeEquity', 'carOther', 'debts']);
+  const lastDay = c.days.at(-1);
+  assert.equal(lastDay.netWorth, Math.round(r.totals.netWorth * 100) / 100);
+  assert.equal(lastDay.homeEquity, r.totals.homeEquity);
+  assert.ok(lastDay.debts < 0);
+  for (const d of c.days) assert.equal(d.netWorth, Math.round(c.layers.reduce((s, l) => s + d[l.key], 0) * 100) / 100);
+});

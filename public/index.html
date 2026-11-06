@@ -47,8 +47,13 @@
     <section class="card">
       <div class="card-head">
         <h2>Net worth over time</h2>
-        <div class="seg" id="range" role="group" aria-label="Time range">
-          <button data-days="30">1M</button><button data-days="90">3M</button><button data-days="180">6M</button><button data-days="365" class="on">1Y</button><button data-days="0">All</button>
+        <div class="nw-tools">
+          <div class="seg" id="nwView" role="group" aria-label="Show">
+            <button data-view="total" class="on">Total</button><button data-view="type">By type</button>
+          </div>
+          <div class="seg" id="range" role="group" aria-label="Time range">
+            <button data-days="30">1M</button><button data-days="90">3M</button><button data-days="180">6M</button><button data-days="365" class="on">1Y</button><button data-days="0">All</button>
+          </div>
         </div>
       </div>
       <div class="legend" id="nwLegend"></div>

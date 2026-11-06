@@ -107,6 +107,7 @@ export function computeSummary(state, now = new Date()) {
     byCategory,
     accounts: accounts.sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category) || Math.abs(b.value) - Math.abs(a.value)),
     history,
+    composition: buildComposition(state.snapshots, Object.fromEntries(visible.map((a) => [a.id, a.category]))),
     cashFlow: flows.months,
     transactions: flows.recent,
     holdings: topHoldings(visible, state.costs || {}, state.names || {}),
@@ -133,6 +134,40 @@ export function buildHistory(snapshots, includeIds) {
     }
     return { date, assets: r2(assets), liabilities: r2(liabilities), netWorth: r2(assets - liabilities) };
   });
+}
+
+// Net worth by type for every day, as layers that add up to net worth:
+// equity layers (home value minus mortgage, car value minus car loan) so a
+// big asset and its loan don't show as two huge layers that cancel out.
+export const LAYERS = [
+  ['retirement', 'Retirement', ['retirement']],
+  ['investments', 'Investments', ['investments']],
+  ['cash', 'Cash', ['cash']],
+  ['homeEquity', 'Home equity', ['property', 'mortgage']],
+  ['carOther', 'Car and other', ['vehicle', 'autoLoan', 'otherAsset']],
+  ['debts', 'Other debts', ['creditCard', 'studentLoan', 'otherDebt']],
+];
+export function buildComposition(snapshots, categoryOf) {
+  const layerOf = {};
+  for (const [key, , cats] of LAYERS) for (const c of cats) layerOf[c] = key;
+  const last = {};
+  const used = new Set();
+  const days = Object.keys(snapshots).sort().map((date) => {
+    Object.assign(last, snapshots[date]);
+    const row = { date };
+    for (const [key] of LAYERS) row[key] = 0;
+    for (const [id, v] of Object.entries(last)) {
+      const layer = layerOf[categoryOf[id]];
+      if (!layer) continue;
+      row[layer] += v;
+      used.add(layer);
+    }
+    let total = 0;
+    for (const [key] of LAYERS) { row[key] = r2(row[key]); total += row[key]; }
+    row.netWorth = r2(total);
+    return row;
+  });
+  return { layers: LAYERS.filter(([k]) => used.has(k)).map(([key, label]) => ({ key, label })), days };
 }
 
 function valueAsOf(history, key) {

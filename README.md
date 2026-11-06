@@ -4,7 +4,7 @@ A personal finance dashboard that keeps itself up to date. It pulls balances and
 
 ![Dashboard](docs/screenshot.png)
 
-**What it shows:** net worth and how it changed over 30 days and a year, a net worth chart with history built up one point per day, assets and debts by category, home and car equity, monthly money in and out (transfers between your own accounts are left out, loan payments count as money out), every account with its 30-day change, top holdings with gains (where the brokerage reports them), and recent transactions you can search.
+**What it shows:** net worth and how it changed over 30 days and a year, a net worth chart with history built up one point per day (switch it to **By type** to see retirement, investments, cash, home equity, car and other debts stacked up to your net worth), assets and debts by category, home and car equity, monthly money in and out (transfers between your own accounts are left out, loan payments count as money out), every account with its 30-day change, top holdings with gains (where the brokerage reports them), and recent transactions you can search.
 
 ## Run it
 

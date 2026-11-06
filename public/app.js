@@ -97,7 +97,11 @@ function render() {
   renderTransactions();
 }
 
+let nwView = (() => { try { return localStorage.getItem('fintrack.nwView') || 'total'; } catch { return 'total'; } })();
+
 function renderNetWorthChart() {
+  for (const b of $('nwView').children) b.classList.toggle('on', b.dataset.view === nwView);
+  if (nwView === 'type') return renderComposition();
   const all = data.history;
   let pts = all;
   if (rangeDays) {
@@ -117,6 +121,77 @@ function renderNetWorthChart() {
       <div class="r"><span>Assets</span><b>${fmt(p.row.assets)}</b></div>
       <div class="r"><span>Debts</span><b>${fmt(p.row.liabilities)}</b></div>`,
   });
+}
+
+// Net worth by type: layers stacked up from zero (and debts or negative
+// equity down from it), with net worth as a line along the top.
+const LAYER_COLORS = { retirement: 'var(--s1)', investments: 'var(--s2)', cash: 'var(--s3)', homeEquity: 'var(--s4)', carOther: 'var(--s5)', debts: 'var(--s8)' };
+
+function renderComposition() {
+  const { layers, days: all } = data.composition;
+  let pts = all;
+  if (rangeDays) {
+    const cut = new Date(Date.now() - rangeDays * 86400000).toISOString().slice(0, 10);
+    pts = all.filter((p) => p.date >= cut);
+  }
+  const el = $('nwChart');
+  const now = all.at(-1);
+  $('nwLegend').innerHTML = layers.map((l) => `<span><i class="sq" style="background:${LAYER_COLORS[l.key]}"></i>${esc(l.label)}${now ? `<b>${fmt(now[l.key])}</b>` : ''}</span>`).join('')
+    + '<span><i style="background:var(--text)"></i>Net worth</span>';
+  if (pts.length < 2) {
+    el.innerHTML = `<div class="empty">${all.length ? 'Not enough history in this range yet.' : 'History starts with the first sync and grows a point a day.'}</div>`;
+    return;
+  }
+  el.innerHTML = '';
+  const W = Math.max(320, el.clientWidth || 800), H = 280, L = 64, R = 12, T = 12, B = 28;
+  // Stack each day: positive layers up from 0, negative ones down from 0.
+  const stacks = pts.map((p) => {
+    let up = 0, down = 0;
+    const seg = {};
+    for (const l of layers) {
+      const v = p[l.key];
+      if (v >= 0) { seg[l.key] = [up, up + v]; up += v; } else { seg[l.key] = [down + v, down]; down += v; }
+    }
+    return { seg, up, down };
+  });
+  const lo = Math.min(0, ...stacks.map((s) => s.down)), hi = Math.max(0, ...stacks.map((s) => s.up));
+  // A sliver of debt below zero shouldn't stretch the axis down a whole step.
+  const small = lo < 0 && -lo < hi * 0.04;
+  const ticks = niceTicks(small ? 0 : lo, hi);
+  const y0 = small ? lo * 1.2 : ticks[0], y1 = ticks.at(-1);
+  const last = pts.length - 1;
+  const x = (i) => L + (i / last) * (W - L - R);
+  const y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Net worth by type, ${fmt(pts[last].netWorth)} on ${longDate(pts[last].date)}` }, el);
+  for (const tv of ticks) {
+    svg('line', { x1: L, x2: W - R, y1: y(tv), y2: y(tv), class: tv === 0 ? 'baseline' : 'gridline' }, root);
+    svg('text', { x: L - 8, y: y(tv) + 4, 'text-anchor': 'end' }, root).textContent = compact(tv);
+  }
+  const nx = Math.max(2, Math.min(6, pts.length, Math.floor((W - L) / 90)));
+  for (let k = 0; k < nx; k++) {
+    const i = Math.round((k / (nx - 1)) * last);
+    svg('text', { x: x(i), y: H - 8, 'text-anchor': k === 0 ? 'start' : k === nx - 1 ? 'end' : 'middle' }, root).textContent = shortDate(pts[i].date);
+  }
+  for (const l of layers) {
+    const top = stacks.map((s, i) => `${x(i).toFixed(1)},${y(s.seg[l.key][1]).toFixed(1)}`);
+    const bottom = stacks.map((s, i) => `${x(i).toFixed(1)},${y(s.seg[l.key][0]).toFixed(1)}`).reverse();
+    // A thin surface-colored outline keeps neighboring layers apart.
+    svg('path', { d: `M${top.join('L')}L${bottom.join('L')}Z`, fill: LAYER_COLORS[l.key], stroke: 'var(--surface)', 'stroke-width': 1, 'fill-opacity': 0.9 }, root);
+  }
+  svg('path', { d: pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.netWorth).toFixed(1)}`).join(''), fill: 'none', stroke: 'var(--text)', 'stroke-width': 2, 'stroke-linejoin': 'round' }, root);
+  const cross = svg('line', { y1: T, y2: H - B, class: 'cross', visibility: 'hidden' }, root);
+  const hit = svg('rect', { x: L, y: 0, width: W - L - R, height: H, fill: 'transparent' }, root);
+  const move = (ev) => {
+    const box = root.getBoundingClientRect();
+    const i = Math.max(0, Math.min(last, Math.round(((((ev.clientX - box.left) / box.width) * W) - L) / (W - L - R) * last)));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+    const p = pts[i];
+    showTip(`<div class="t">${longDate(p.date)}</div>${layers.map((l) => `<div class="r"><span><i style="background:${LAYER_COLORS[l.key]}"></i>${esc(l.label)}</span><b>${fmt(p[l.key])}</b></div>`).join('')}
+      <div class="r"><span><i style="background:var(--text)"></i>Net worth</span><b>${fmt(p.netWorth)}</b></div>`, ev);
+  };
+  hit.addEventListener('pointermove', move);
+  hit.addEventListener('pointerdown', move);
+  hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
 }
 
 function niceTicks(min, max, count = 4) {
@@ -382,6 +457,13 @@ async function act(fn) {
   try { await fn(); await load(); } catch (err) { alert(err.message); }
 }
 
+$('nwView').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button');
+  if (!b) return;
+  nwView = b.dataset.view;
+  try { localStorage.setItem('fintrack.nwView', nwView); } catch { /* private window */ }
+  renderNetWorthChart();
+});
 $('range').addEventListener('click', (ev) => {
   const b = ev.target.closest('button');
   if (!b) return;

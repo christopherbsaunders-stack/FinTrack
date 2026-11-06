@@ -78,7 +78,8 @@ function render() {
   if (data.history.length >= 2) {
     const h = data.history;
     parts.push(`<section><h2>Net worth over time</h2><div class="chart">${lineSvg(h)}</div>
-      <p class="note">From ${fmt(h[0].netWorth)} on ${date(h[0].date)} to ${fmt(h.at(-1).netWorth)} on ${date(h.at(-1).date)} (${signed(h.at(-1).netWorth - h[0].netWorth)}). FinTrack records each account's value daily from the day it was added.</p></section>`);
+      <p class="note">From ${fmt(h[0].netWorth)} on ${date(h[0].date)} to ${fmt(h.at(-1).netWorth)} on ${date(h.at(-1).date)} (${signed(h.at(-1).netWorth - h[0].netWorth)}). FinTrack records each account's value daily from the day it was added.</p>
+      ${compositionTable()}</section>`);
   }
 
   // ----- balance sheet -----
@@ -221,6 +222,17 @@ function render() {
 
 // "Emergency fund" needs no "(emergency fund)" after it; "Rainy day" does.
 function bucketName(b) { return b.emergency && !/emergency/i.test(b.name) ? `${b.name} (emergency fund)` : b.name; }
+
+// Net worth by type, where tracking began and now: which parts grew.
+function compositionTable() {
+  const c = data.composition;
+  if (!c?.days?.length || c.days.length < 2) return '';
+  const a = c.days[0], b = c.days.at(-1);
+  return `<table style="margin-top:10px"><thead><tr><th>By type</th><th class="n">${date(a.date)}</th><th class="n">${date(b.date)}</th><th class="n">Change</th></tr></thead><tbody>
+    ${c.layers.map((l) => `<tr><td>${esc(l.label)}</td><td class="n">${fmt(a[l.key])}</td><td class="n">${fmt(b[l.key])}</td><td class="n ${cls(b[l.key] - a[l.key])}">${signed(b[l.key] - a[l.key])}</td></tr>`).join('')}
+    <tr class="total"><td>Net worth</td><td class="n">${fmt(a.netWorth)}</td><td class="n">${fmt(b.netWorth)}</td><td class="n ${cls(b.netWorth - a.netWorth)}">${signed(b.netWorth - a.netWorth)}</td></tr></tbody></table>
+    <p class="note">Home equity is the home's value minus the mortgage; car and other is the car's value minus its loan, plus other assets.</p>`;
+}
 
 function kv(k, v) { return `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
 
