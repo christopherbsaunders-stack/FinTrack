@@ -38,6 +38,22 @@ const DATA_FILE = process.env.FINTRACK_DATA || join(ROOT, 'data', 'state.json');
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 4600);
 const PASSWORD = process.env.FINTRACK_PASSWORD || '';
+// When FinTrack listens beyond this computer (a home server), it needs a
+// password, and answers only to the names it's reached by: a list like
+// "basement:4600,basement.local:4600,192.168.1.20:4600". That keeps other
+// web pages from reaching it under a name they control (DNS rebinding).
+const LOCAL_ONLY = ['127.0.0.1', 'localhost', '::1'].includes(HOST);
+const ALLOWED_HOSTS = new Set((process.env.FINTRACK_ALLOWED_HOSTS || '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean)
+  .map((h) => (h.includes(':') && !h.startsWith('[') ? h : `${h}:${PORT}`)));
+if (!LOCAL_ONLY && !DEMO) {
+  const problems = [];
+  if (!PASSWORD) problems.push('FINTRACK_PASSWORD is not set: anyone on your network could open your finances.');
+  if (!ALLOWED_HOSTS.size) problems.push('FINTRACK_ALLOWED_HOSTS is not set: list the names this server is reached by, like basement:4600,192.168.1.20:4600.');
+  if (problems.length) {
+    console.error(`FinTrack won't listen on ${HOST} (beyond this computer) until:\n  - ${problems.join('\n  - ')}`);
+    process.exit(1);
+  }
+}
 const CHECK_EVERY_MS = 10 * 60 * 1000;
 
 let state = DEMO ? demoState() : loadState(DATA_FILE);
@@ -116,8 +132,9 @@ function httpError(status, message) { return Object.assign(new Error(message), {
 // (and DNS rebinding) from reading or changing your data through the browser.
 function allowedHost(req) {
   const host = (req.headers.host || '').toLowerCase();
-  if (HOST !== '127.0.0.1' && HOST !== 'localhost') return true; // you chose to expose it; use FINTRACK_PASSWORD
-  return host === `localhost:${PORT}` || host === `127.0.0.1:${PORT}`;
+  if (host === `localhost:${PORT}` || host === `127.0.0.1:${PORT}`) return true;
+  if (!LOCAL_ONLY && DEMO && !ALLOWED_HOSTS.size) return true;   // a demo on the network has nothing to protect
+  return ALLOWED_HOSTS.has(host);
 }
 
 function sameOrigin(req) {
@@ -520,7 +537,7 @@ async function priceHistory() {
 
 const server = createServer(async (req, res) => {
   try {
-    if (!allowedHost(req)) return send(res, 421, { error: 'Wrong host.' });
+    if (!allowedHost(req)) return send(res, 421, `FinTrack doesn't answer to ${String(req.headers.host || 'this name').slice(0, 100)}. Add it to FINTRACK_ALLOWED_HOSTS on the server.`, 'text/plain; charset=utf-8');
     if (!authorized(req)) {
       res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="FinTrack"' });
       return res.end('Password required.');
@@ -560,7 +577,7 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`FinTrack${DEMO ? ' (demo data)' : ''} on http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}`);
   if (!DEMO && !state.accessUrl) console.log('Not connected yet: open the page and paste a SimpleFIN setup token.');
-  if (HOST !== '127.0.0.1' && HOST !== 'localhost' && !PASSWORD) console.warn('Warning: listening beyond this computer with no FINTRACK_PASSWORD set.');
+  if (!LOCAL_ONLY) console.log(`Answering to: ${[...ALLOWED_HOSTS].join(', ') || 'any name (demo)'}; password ${PASSWORD ? 'required' : 'not set'}.`);
 });
 
 if (syncDue()) runSync('startup').catch(() => {});

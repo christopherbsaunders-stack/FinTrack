@@ -83,13 +83,9 @@ A **value vs. money put in** chart shows the account's value each trading day ag
 
 Everything is in `data/state.json` on your computer, readable only by you. It holds the SimpleFIN access link, which can read (never move) your balances and transactions. `data/` is in `.gitignore`, so it never gets committed. To revoke access, delete the connection in SimpleFIN Bridge, and press Disconnect in Settings.
 
-The server listens only on this computer (127.0.0.1) and refuses requests from other web pages. To open it from your phone on your home network, set a password:
+The server listens only on this computer (127.0.0.1) and refuses requests from other web pages. To open it from other devices, see **Run it on a home server**: on the network it requires a password and the list of names it answers to.
 
-```bash
-HOST=0.0.0.0 FINTRACK_PASSWORD='something long' npm start
-```
-
-Settings by environment variable: `PORT` (4600), `HOST` (127.0.0.1), `FINTRACK_PASSWORD`, `FINTRACK_DATA` (path of the state file).
+Settings by environment variable: `PORT` (4600), `HOST` (127.0.0.1), `FINTRACK_PASSWORD`, `FINTRACK_ALLOWED_HOSTS` (the names it answers to when listening on the network), `FINTRACK_DATA` (path of the state file), `FINTRACK_BACKUP_DIR`, `TZ`.
 
 ## Backups
 
@@ -102,6 +98,74 @@ npm run restore -- data/backups/fintrack-2026-11-01.json
 ```
 
 The current data is saved first (as `before-restore-....json` in `data/backups`). If the current data has a SimpleFIN connection, it's kept; otherwise paste a new setup token after starting FinTrack.
+
+## Run it on a home server (Ubuntu)
+
+FinTrack can run all the time on a small Ubuntu server and be opened from any computer or phone in the house. When it listens on the network, it **requires a password** and answers only to the names you list, and it won't start without both.
+
+**1. Install Node.js 22 and git.** Ubuntu's own Node.js is too old.
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs git
+```
+
+**2. Get FinTrack into `/opt/fintrack`**, at a release. The repository is private, so git asks you to sign in (a GitHub token works as the password; a read-only deploy key is the tidier choice for a server).
+
+```bash
+sudo git clone https://github.com/christopherbsaunders-stack/FinTrack.git /opt/fintrack
+cd /opt/fintrack && sudo git checkout v1.1.0
+```
+
+**3. Set it up as a service.** This creates a `fintrack` user with no login, a data folder only it can open (`/var/lib/fintrack`), and a service that starts with the server and restarts if it stops.
+
+```bash
+sudo /opt/fintrack/deploy/install.sh
+```
+
+**4. Fill in the settings**: the password (in double quotes), every name or address you'll use to reach it (`basement,basement.local,192.168.1.20`), and your time zone. FinTrack records each day and counts paydays by it.
+
+```bash
+sudo nano /etc/fintrack.env
+```
+
+**5. Bring your data over** (optional; otherwise start fresh and paste a SimpleFIN token). Stop FinTrack on the old computer, copy its `data/state.json` to the server (for example with `scp`, to `/tmp/state.json`), then:
+
+```bash
+sudo install -o fintrack -g fintrack -m 600 /tmp/state.json /var/lib/fintrack/state.json && rm /tmp/state.json
+```
+
+**6. Start it, and check on it.**
+
+```bash
+sudo systemctl start fintrack
+```
+
+```bash
+systemctl status fintrack
+```
+
+```bash
+journalctl -u fintrack -f
+```
+
+Then open `http://basement:4600` (your server's name) from any browser in the house; it asks for the password (any user name).
+
+**Firewall.** If the server runs `ufw`, let the home network in, and only it:
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 4600 proto tcp
+```
+
+**Updating** to a new release: it fetches it, runs the tests, and restarts only if they pass.
+
+```bash
+sudo /opt/fintrack/deploy/update.sh v1.2.0
+```
+
+**From outside the house**, don't open a port on your router. Install [Tailscale](https://tailscale.com) on the server and your phone: it connects them privately and encrypts the traffic. Add the server's Tailscale name (and its 100.x address) to `FINTRACK_ALLOWED_HOSTS`.
+
+**Backups** go to `/var/lib/fintrack/backups`. To keep a copy off the server, mount a NAS folder, set `FINTRACK_BACKUP_DIR` in `/etc/fintrack.env`, and let the service write there (`sudo systemctl edit fintrack`, then add `[Service]` and `ReadWritePaths=/mnt/nas/fintrack`).
 
 ## Start it at login
 
