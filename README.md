@@ -22,6 +22,16 @@ The first time FinTrack opens, a short tour walks through each part and what to 
 
 The dashboard has five tabs: **Overview** (net worth, its chart, assets and debts), **Investments** (the 401(k) chart, investment mix, holdings), **Savings & budget** (buckets, income and expenses, cash flow), **Loans**, and **Accounts** (every account and recent transactions), and **Insurance & estate**. The tab is part of the address (`#loans`), so a bookmark or refresh keeps it. Click a card's title (▾) to collapse it; collapsed cards stay collapsed. The small (i) buttons next to titles, figures and form fields explain what each is and where its numbers come from; the wording is all in `public/info.js`.
 
+## Online preview
+
+To show FinTrack to someone without installing it:
+
+```bash
+npm run preview
+```
+
+builds `dist-preview/`: the real dashboard and advisor report with made-up example accounts baked in (generic bank names, every section filled in), no server needed. Host the folder anywhere that serves files. It can't save, download or print, and says so when someone tries.
+
 ## Connect your accounts (once)
 
 1. Make an account at [bridge.simplefin.org](https://bridge.simplefin.org) (about $15 a year).
@@ -123,6 +133,7 @@ src/buckets.js     splitting an account into buckets; emergency fund months
 src/backup.js      daily backups (without the bank access link) and which to keep
 src/reports.js     report snapshots and what changed since the last one
 src/restore.js     npm run restore -- <backup>
+scripts/preview.mjs  npm run preview: the online preview with example data (preview-shim.js stands in for the server)
 src/protection.js  insurance policies, estate documents, beneficiaries, and their checks
 src/health.js      the financial health checks and their guides
 src/retirement.js  the retirement projection: poor, typical, good; what closes a gap

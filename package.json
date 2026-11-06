@@ -11,6 +11,7 @@
     "start": "node src/server.js",
     "demo": "node src/server.js --demo",
     "test": "node --test tests/*.test.js",
-    "restore": "node src/restore.js"
+    "restore": "node src/restore.js",
+    "preview": "node scripts/preview.mjs"
   }
 }

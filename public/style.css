@@ -60,7 +60,7 @@ a { color: var(--accent); }
 h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
 code { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; font-size: 12px; }
 
-.top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .brand { font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
 .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--warning-bg); border: 1px solid var(--warning-border); margin-left: 6px; vertical-align: 2px; }
 .sync { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
@@ -324,3 +324,5 @@ button.info:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 .info-body { color: var(--text-2); }
 .info-body b { color: var(--text); }
 .form-grid label > span { display: inline-flex; align-items: center; }
+/* On a phone with a status bar, keep the strip above the sticky header painted. */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
