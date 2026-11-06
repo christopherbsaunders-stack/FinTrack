@@ -4,7 +4,7 @@
 import { fetchAccounts, MAX_RANGE_DAYS } from './simplefin.js';
 import { guessCategory, signedValue } from './classify.js';
 import { dayKey } from './store.js';
-import { refreshPrices, fillNames, lacksName } from './prices.js';
+import { refreshPrices, fillNames } from './prices.js';
 import { valuePriced, historyFrom } from './priced.js';
 import { fetchSeries, indexedValue, seriesLabel, staleness } from './hpi.js';
 
@@ -21,8 +21,11 @@ export async function syncAll(state, { now = new Date(), fetchImpl } = {}) {
     try { Object.assign(out, await syncNow(state, { now, fetchImpl })); } catch (err) { out.errors = [err.message]; }
   }
   // Holdings that came without a company name (Robinhood sends none for some).
-  const nameless = [...new Set(Object.values(state.accounts).flatMap((a) => (a.holdings || []).filter((h) => h.symbol && lacksName(h.description)).map((h) => h.symbol)))];
-  if (nameless.length) await fillNames(state, nameless, { now, fetchImpl });
+  // Each holding's name (if it came without one) and type, looked up once.
+  const symbols = [...new Set(Object.values(state.accounts).flatMap((a) => (a.holdings || []).filter((h) => h.symbol).map((h) => h.symbol)))];
+  // (Funds priced daily for a 401(k) already know their type from those prices.)
+  const unseen = symbols.filter((sym) => !state.symbolInfo?.[sym] && !state.prices?.[sym]);
+  if (unseen.length) await fillNames(state, unseen, { now, fetchImpl });
   const tickers = pricedTickers(state);
   if (tickers.length) {
     out.priceErrors = await refreshPrices(state, tickers, { now, fetchImpl, needFrom: historyNeeds(state) });

@@ -41,6 +41,7 @@ export function parseChart(ticker, body) {
   return {
     ticker: ticker.toUpperCase(),
     name: r.meta?.longName || r.meta?.shortName || null,
+    type: r.meta?.instrumentType || null,   // EQUITY, ETF, MUTUALFUND, ...
     currency: r.meta?.currency || 'USD',
     closes,
     events: events.filter((e) => (e.type === 'split' ? e.ratio > 0 && e.ratio !== 1 : e.amount > 0)),
@@ -56,6 +57,7 @@ export function mergeHistory(prices, h, now = new Date()) {
   prices[h.ticker] = {
     ticker: h.ticker,
     name: h.name || cur.name || null,
+    type: h.type || cur.type || null,
     currency: h.currency || cur.currency,
     closes: { ...cur.closes, ...h.closes },
     events: [...events.values()].sort((a, b) => a.date.localeCompare(b.date)),
@@ -121,18 +123,22 @@ export function lacksName(description) {
   return !description || /^[\d.,]+ shares? of /i.test(description);
 }
 
-// Look up company names for holdings that came without one, once each.
-// A symbol Yahoo doesn't know is tried again after a week.
+// Look up each holding once: its name (for holdings that came without one)
+// and its type (a single stock, an ETF, a mutual fund). A symbol Yahoo
+// doesn't know is tried again after a week.
 export async function fillNames(state, symbols, { now = new Date(), fetchImpl } = {}) {
   state.names ||= {};
   state.nameMisses ||= {};
+  state.symbolInfo ||= {};
   for (const sym of symbols) {
-    if (state.names[sym]) continue;
+    if (state.symbolInfo[sym]) continue;
     const missed = state.nameMisses[sym];
     if (missed && now - new Date(missed) < 7 * 86400000) continue;
     try {
       const h = await fetchHistory(sym, { range: '5d' }, fetchImpl);
-      if (h.name) { state.names[sym] = h.name; delete state.nameMisses[sym]; } else state.nameMisses[sym] = now.toISOString();
+      state.symbolInfo[sym] = { name: h.name, type: h.type };
+      if (h.name && !state.names[sym]) state.names[sym] = h.name;
+      delete state.nameMisses[sym];
     } catch { state.nameMisses[sym] = now.toISOString(); }
   }
 }

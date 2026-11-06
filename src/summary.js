@@ -7,6 +7,7 @@ import { lacksName } from './prices.js';
 import { splitBuckets, averageSpending, monthsCovered } from './buckets.js';
 import { computeBudget, ratios } from './budget.js';
 import { computeMix } from './mix.js';
+import { computeFees } from './fees.js';
 
 const DAY = 86400000;
 const FLOW_CATEGORIES = new Set(['cash', 'creditCard']);
@@ -116,6 +117,10 @@ export function computeSummary(state, now = new Date()) {
     emergency,
     budget,
     mix: computeMix(visible, state.assetClasses || {}, state.settings?.targetMix || null),
+    fees: computeFees(topHoldings(visible, state.costs || {}, state.names || {}, 1000), state.fees || {}, {
+      ...Object.fromEntries(Object.entries(state.prices || {}).map(([t, p]) => [t, { type: p.type || null }])),
+      ...(state.symbolInfo || {}),
+    }),
     categories: CATEGORY_ORDER.map((id) => ({ id, ...CATEGORIES[id] })),
   };
 }
@@ -276,7 +281,7 @@ export function findTransfers(txs) {
 
 // Holdings across accounts, by symbol. Where the brokerage doesn't send what
 // you paid, the average cost per share you entered (`costs`) fills it in.
-function topHoldings(accounts, costs = {}, names = {}) {
+function topHoldings(accounts, costs = {}, names = {}, limit = 25) {
   const map = new Map();
   for (const a of accounts) {
     for (const h of a.holdings || []) {
@@ -300,7 +305,7 @@ function topHoldings(accounts, costs = {}, names = {}) {
       map.set(key, cur);
     }
   }
-  return [...map.values()].sort((a, b) => b.value - a.value).slice(0, 25)
+  return [...map.values()].sort((a, b) => b.value - a.value).slice(0, limit)
     .map((h) => ({
       ...h, value: r2(h.value), shares: Math.round(h.shares * 1e4) / 1e4,
       // Brokerages send shares and market value; the price is the one they valued it at.

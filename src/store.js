@@ -20,6 +20,8 @@ export function emptyState() {
     indexes: {},          // FRED series id -> { obs: { date: value }, fetchedAt }
     indexErrors: [],
     names: {},            // symbol -> company name, looked up when the brokerage sends none
+    symbolInfo: {},       // symbol -> { name, type } from the price data (EQUITY, ETF, MUTUALFUND)
+    fees: {},             // symbol -> expense ratio in percent, as entered
     costs: {},
     assetClasses: {},     // holding symbol (or 'acct:<id>') -> { usStocks, intlStocks, bonds, cash } fractions            // symbol -> average cost per share you entered (when the brokerage doesn't send it)
     lastPriceSync: null,

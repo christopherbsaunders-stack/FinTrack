@@ -49,6 +49,8 @@ A **value vs. money put in** chart shows the account's value each trading day ag
 
 **Gains on stocks.** Brokerages send shares and market value (the price shown is value ÷ shares). Robinhood doesn't send what you paid, so its holdings show **Add cost**: enter your average cost per share (in Robinhood: open the stock, "Your average cost") and the Gain column shows the gain and percent from then on, using your current shares. Click the gain to change it when you buy more and the average changes. A cost your brokerage does send always wins.
 
+**What your investments cost.** On the Investments tab, enter each fund's expense ratio once (for a 401(k), from the plan's fee disclosure; Paychex Flex has a Fee disclosure link): FinTrack shows what each costs a year in dollars, the total, the weighted expense ratio, and what that rate would take over 10 and 20 years at 6% growth before fees. Single stocks are recognized from their price data and have no fund fee; ETFs and mutual funds ask for one. The advisor report includes it.
+
 **Investment mix.** The **Investment mix** card splits the money in investment and retirement accounts into US stocks, international stocks, bonds and cash, as one bar. Each holding starts with a guess from its name ("Total Return" is bonds, "International" is international, a single stock is US stocks); correct any in **What's in each**, mark a target-date or balanced fund as a blend with its percentages, and **Accept the guesses** once checked. An account FinTrack sees only as a balance (no holdings) can be sorted as a whole; uninvested cash in a brokerage account counts as cash. **Set a target mix** to see how far each part is from it, in percent and dollars. The advisor report includes the mix.
 
 **Savings buckets.** One bank account often holds several pots of money. Click **Split into buckets** on the account: give each bucket an amount set aside (and an optional goal), and pick one bucket to hold the rest of the balance, where deposits and interest land. When you move money between buckets, change their amounts. Mark one bucket as the emergency fund: the **Savings buckets** card shows how many months it would last, measured against the essential expenses under Income and expenses. Buckets don't change net worth; they show what the money is for.
@@ -98,6 +100,7 @@ src/sync.js        merge a fetch into the state; record today's value of every a
 src/classify.js    categories (asset or debt) and the guess from an account's name
 src/summary.js     totals, history, cash flow, holdings for the dashboard (pure, tested)
 src/buckets.js     splitting an account into buckets; emergency fund months
+src/fees.js        fund expense ratios in dollars, and their cost over the years
 src/mix.js         investment mix: stocks, bonds, cash; guesses from fund names; target
 src/budget.js      income, the monthly expense list, essentials, and ratios
 src/export.js      spreadsheet (CSV) exports

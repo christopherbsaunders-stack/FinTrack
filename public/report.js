@@ -140,6 +140,15 @@ function render() {
         </tbody></table>
         <p class="note">${pct(m.stocks, 0)} in stocks across investment and retirement accounts.${m.guessed ? ` ${m.guessed} holding${m.guessed > 1 ? 's are' : ' is'} sorted by a guess from the fund's name.` : ''}${parts.some((p) => p.key === 'unclassified') ? ' Some holdings aren\'t sorted yet.' : ''}</p>`;
     }
+    // What the funds cost.
+    const f = data.fees;
+    if (f?.funds && f.weighted != null) {
+      html += `<h3>Fund fees</h3>
+        <p class="note">About <b>${fmt(f.yearly)} a year</b> in fund expenses (a weighted ${f.weighted.toFixed(2)}% of ${fmt(f.knownValue)}). At 6% growth before fees and no new contributions, that rate would take about ${f.longRun.map((l) => `${fmt(l.cost)} over ${l.years} years`).join(' and ')}.${f.unknown ? ` These figures cover only the funds with an expense ratio entered; ${f.unknown} ${f.unknown > 1 ? 'have' : 'has'} none yet.` : ''}</p>
+        <table><thead><tr><th>Holding</th><th class="n">Value</th><th class="n">Expense ratio</th><th class="n">Per year</th></tr></thead><tbody>
+        ${f.rows.filter((r) => r.kind !== 'stock').map((r) => `<tr><td><b>${esc(r.symbol)}</b> ${esc(r.name || '')}</td><td class="n">${fmt(r.value)}</td><td class="n">${r.expenseRatio == null ? '–' : `${r.expenseRatio.toFixed(2)}%`}</td><td class="n">${r.yearly == null ? '–' : cents(r.yearly)}</td></tr>`).join('')}
+        </tbody></table>`;
+    }
     html += '</section>';
     parts.push(html);
   }

@@ -191,8 +191,8 @@ test('a holding without a name gets one looked up, once', async () => {
   const { syncAll } = await import('../src/sync.js');
   await syncAll(s, { now, fetchImpl: fake });
   await syncAll(s, { now, fetchImpl: fake });
-  assert.equal(urls.length, 1, 'only AMD, and only once');
-  assert.match(urls[0], /chart\/AMD/);
+  // Each holding is looked up once (its type; and AMD's name, which came as filler).
+  assert.deepEqual(urls.map((u) => /chart\/(\w+)/.exec(u)[1]).sort(), ['AMD', 'HAS']);
   const by = Object.fromEntries(computeSummary(s, now).holdings.map((x) => [x.symbol, x]));
   assert.equal(by.AMD.description, 'Advanced Micro Devices, Inc.');
   assert.equal(by.HAS.description, 'Hasbro Inc');

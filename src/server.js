@@ -22,6 +22,7 @@ import { validateBuckets } from './buckets.js';
 import { validateBudget } from './budget.js';
 import { validateSplit, validateTarget } from './mix.js';
 import { exportCsv, EXPORTS } from './export.js';
+import { validateExpenseRatio } from './fees.js';
 import { demoState } from './demo.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -274,6 +275,20 @@ const routes = [
   ['PUT', /^\/api\/budget$/, async (req) => {
     const { budget } = await readJson(req);
     try { state.settings.budget = validateBudget(budget || {}); } catch (err) { throw httpError(400, err.message); }
+    persist();
+    return { ok: true };
+  }],
+
+  // A fund's expense ratio (percent a year); null clears it.
+  ['PUT', /^\/api\/fees\/([^/]+)$/, async (req, [, rawSym]) => {
+    const symbol = decodeURIComponent(rawSym).toUpperCase();
+    if (!/^[A-Z0-9.^-]{1,12}$/.test(symbol)) throw httpError(400, `"${symbol}" isn't a ticker symbol.`);
+    const { expenseRatio } = await readJson(req);
+    state.fees ||= {};
+    try {
+      const v = validateExpenseRatio(expenseRatio);
+      if (v == null) delete state.fees[symbol]; else state.fees[symbol] = v;
+    } catch (err) { throw httpError(400, err.message); }
     persist();
     return { ok: true };
   }],

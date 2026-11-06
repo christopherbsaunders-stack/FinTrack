@@ -163,6 +163,7 @@ function render() {
   renderLoans();
   renderGrowth();
   renderMix();
+  renderFees();
   renderBuckets();
   renderBudget();
   $('noLoans').hidden = data.loans.length > 0 || data.accounts.some((a) => !a.hidden && a.category === 'mortgage' && !a.loan);
@@ -869,6 +870,41 @@ $('mixBody').addEventListener('change', (ev) => {
   const it = data.mix.items.find((i) => i.key === key);
   if (sel.value === 'mixed') { openMix({ key, name: it.symbol || it.name }, it.split); return; }
   act(() => api('/api/mix/class', { method: 'PUT', body: JSON.stringify({ key, split: sel.value || null }) }));
+});
+
+// ---------- what investments cost ----------
+
+function renderFees() {
+  const f = data.fees;
+  $('feesCard').hidden = !f?.rows.length;
+  if (!f?.rows.length) return;
+  const fundsLeft = f.rows.filter((r) => r.kind === 'unknown');
+  let head = '';
+  if (f.weighted != null && f.funds) {
+    const partial = fundsLeft.length ? ` <span class="small muted">(${f.funds} of ${f.funds + fundsLeft.length} funds so far)</span>` : '';
+    head = `<div class="ytd-row">
+      <div>Fund fees a year${partial}<b>${fmt(f.yearly)}</b></div>
+      <div>Weighted expense ratio<b>${f.weighted.toFixed(2)}%</b></div>
+      ${f.longRun.map((l) => `<div>Over ${l.years} years<b>${fmt(l.cost)}</b></div>`).join('')}
+    </div>
+    <p class="small muted">The yearly cost is each fund's expense ratio times what you hold in it, taken out of the fund's returns rather than billed. "Over 10/20 years" is what that rate would take from today's ${fmt(f.knownValue)} if it grew 6% a year before fees, without new contributions: fees compound like growth does. ${fundsLeft.length ? `Add the ${fundsLeft.length} missing expense ratio${fundsLeft.length > 1 ? 's' : ''} to complete it.` : ''}</p>`;
+  } else {
+    head = `<p class="muted">Each fund charges a yearly fee, its expense ratio, taken out of its returns. Enter each fund's from your 401(k)'s fee disclosure (Paychex Flex → Retirement → Fee disclosure) or the fund's page, and FinTrack shows what you pay in dollars. Single stocks have no fund fee.</p>`;
+  }
+  $('feesBody').innerHTML = head + `<div class="table-wrap"><table><thead><tr><th>Holding</th><th class="num">Value</th><th class="num">Expense ratio</th><th class="num">Per year</th></tr></thead><tbody>
+    ${f.rows.map((r) => `<tr><td><b>${esc(r.symbol)}</b> <span class="muted">${esc(r.name || '')}</span></td><td class="num">${fmt(r.value)}</td>
+      <td class="num">${r.kind === 'stock' ? '<span class="muted">Stock: none</span>' : `<button class="linkish" data-fee="${esc(r.symbol)}">${r.expenseRatio == null ? 'Add' : `${r.expenseRatio.toFixed(2)}%`}</button>`}</td>
+      <td class="num">${r.yearly == null ? '<span class="muted">–</span>' : fmtCents(r.yearly)}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+$('feesBody').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-fee]');
+  if (!b) return;
+  const r = data.fees.rows.find((x) => x.symbol === b.dataset.fee);
+  const v = prompt(`Expense ratio for ${r.symbol}, in percent a year (like 0.85).\nYour 401(k)'s fee disclosure lists it as "total annual operating expenses"; for other funds, it's on the fund's page.\nLeave empty to remove it.`, r.kind === 'entered' ? r.expenseRatio : '');
+  if (v === null) return;
+  act(() => api(`/api/fees/${encodeURIComponent(r.symbol)}`, { method: 'PUT', body: JSON.stringify({ expenseRatio: v.trim() === '' ? null : v }) }));
 });
 
 // ---------- buckets: one account split into named parts ----------
