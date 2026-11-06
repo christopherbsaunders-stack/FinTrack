@@ -3,6 +3,7 @@
 import { compare, byYear, scheduledPayment, addMonths } from './loans.js';
 import { STATES } from './hpi.js';
 import { startTour } from './tour.js';
+import { infoButton } from './info.js';
 
 const $ = (id) => document.getElementById(id);
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -89,7 +90,18 @@ const collapsed = new Set((() => { try { return JSON.parse(localStorage.getItem(
 function cardKey(card) {
   if (card.id) return card.id;
   if (card.dataset.id) return `${card.classList[1] || 'card'}:${card.dataset.id}`;
-  return card.querySelector('h2')?.textContent.trim();
+  const h2 = card.querySelector('h2');
+  return h2 ? (h2.dataset.title ||= h2.textContent.trim()) : undefined;
+}
+// Which (i) a card's title gets.
+const CARD_INFO = {
+  retireCard: 'retire', mixCard: 'mix', feesCard: 'fees', holdingsCard: 'holdings', bucketsCard: 'buckets', budgetCard: 'budget',
+  healthCard: 'health', protChecksCard: 'protChecks', policiesCard: 'policies', docsCard: 'docs', bensCard: 'bens', noLoans: 'loan',
+  'growth-card': 'growth', 'loan-card': 'loan', 'loan-prompt': 'loan',
+  'Net worth over time': 'networth', Assets: 'assets', Debts: 'debts', 'Cash flow': 'cashflow', Accounts: 'accounts', 'Recent transactions': 'transactions',
+};
+function cardInfo(card, h2) {
+  return CARD_INFO[card.id] || CARD_INFO[card.classList[1]] || CARD_INFO[h2.dataset.title];
 }
 // Every card's title becomes a toggle; collapsed ones stay collapsed next time.
 function applyCollapse() {
@@ -97,6 +109,8 @@ function applyCollapse() {
     const h2 = card.querySelector('h2');
     if (!h2) continue;
     const key = cardKey(card);
+    const ik = cardInfo(card, h2);
+    if (ik && !h2.querySelector(':scope > button.info')) h2.insertAdjacentHTML('beforeend', infoButton(ik));
     h2.classList.add('collapse-toggle');
     h2.tabIndex = 0;
     h2.setAttribute('role', 'button');
@@ -129,7 +143,7 @@ document.addEventListener('click', (ev) => {
 });
 document.addEventListener('keydown', (ev) => {
   const h2 = ev.target.closest?.('.collapse-toggle');
-  if (h2 && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); toggleCard(h2); }
+  if (h2 && ev.target === h2 && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); toggleCard(h2); }
 });
 
 function render() {
@@ -153,13 +167,13 @@ function render() {
   $('nwChange').innerHTML = parts.join(' · ') || '<span class="muted">History builds up with each daily sync.</span>';
 
   const tiles = [
-    ['Assets', fmt(t.assets), ''],
-    ['Debts', fmt(t.liabilities), t.debtToAsset == null ? '' : `${Math.round(t.debtToAsset * 100)}% of assets`],
-    ['Cash', fmt(t.cash), 'Checking and savings'],
-    ['Invested', fmt(t.invested), t.retirement ? `${fmt(t.retirement)} in retirement` : ''],
+    ['Assets', fmt(t.assets), '', 't_assets'],
+    ['Debts', fmt(t.liabilities), t.debtToAsset == null ? '' : `${Math.round(t.debtToAsset * 100)}% of assets`, 't_debts'],
+    ['Cash', fmt(t.cash), 'Checking and savings', 't_cash'],
+    ['Invested', fmt(t.invested), t.retirement ? `${fmt(t.retirement)} in retirement` : '', 't_invested'],
   ];
-  if (t.homeEquity != null) tiles.push(['Home equity', fmt(t.homeEquity), 'Value minus mortgage']);
-  $('tiles').innerHTML = tiles.map(([l, v, s]) => `<div class="tile"><div class="label">${l}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`).join('');
+  if (t.homeEquity != null) tiles.push(['Home equity', fmt(t.homeEquity), 'Value minus mortgage', 'homeEquity']);
+  $('tiles').innerHTML = tiles.map(([l, v, s, k]) => `<div class="tile"><div class="label">${l}${infoButton(k, l)}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`).join('');
 
   renderNetWorthChart();
   renderBars();
@@ -479,7 +493,7 @@ function renderHoldings() {
   $('holdingsCard').hidden = !h.length;
   if (!h.length) return;
   const share = new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 });
-  $('holdings').innerHTML = '<thead><tr><th>Holding</th><th class="num">Shares</th><th class="num">Price</th><th class="num">Value</th><th class="num">Gain</th></tr></thead><tbody>' +
+  $('holdings').innerHTML = '<thead><tr><th>Holding</th><th class="num">Shares</th><th class="num">Price</th><th class="num">Value</th><th class="num">Gain' + infoButton('gain') + '</th></tr></thead><tbody>' +
     h.map((x) => `<tr><td><b>${esc(x.symbol || '')}</b> <span class="muted">${esc(x.description)}</span></td>
       <td class="num">${x.shares ? share.format(x.shares) : '<span class="muted">–</span>'}</td>
       <td class="num">${x.price ? fmtCents(x.price) : '<span class="muted">–</span>'}</td><td class="num">${fmt(x.value)}</td>
@@ -714,7 +728,7 @@ function renderGrowth() {
       <div class="card-head"><h2>${esc(a.name)}: value vs. money put in</h2>
         <div class="seg" role="group" aria-label="Time range">${RANGES.map(([d, l]) => `<button type="button" data-days="${d}">${l}</button>`).join('')}</div></div>
       <div class="growth-sum"></div>
-      <div class="legend"><span><i style="background:var(--s1)"></i>Value</span><span><i class="dash"></i>Money put in (value at the start + contributions)</span></div>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Value</span><span><i class="dash"></i>Money put in (value at the start + contributions)${infoButton('putIn')}</span></div>
       <div class="chart"></div>
       <p class="small muted growth-note"></p>
     </section>`).join('');
@@ -824,7 +838,7 @@ function renderMix() {
   const bar = (list, cls) => `<div class="mix-bar ${cls || ''}" role="img" aria-label="${list.map((p) => `${p.label} ${pctTxt(p.pct)}`).join(', ')}">${list.filter((p) => p.pct > 0).map((p) => `<span style="flex:${p.pct} 1 0;background:${mixColor(p.key)}" title="${esc(p.label)}: ${pctTxt(p.pct)}"></span>`).join('')}</div>`;
   let html = `<div class="ytd-row"><div>Invested<b>${fmt(m.total)}</b></div><div>In stocks<b>${pctTxt(m.stocks)}</b></div></div>`;
   html += bar(parts);
-  if (m.vsTarget) html += `<div class="mix-target-label">Target</div>` + bar(m.vsTarget.map((t) => ({ key: t.key, label: t.label, pct: t.want })), 'target');
+  if (m.vsTarget) html += `<div class="mix-target-label">Target${infoButton('target')}</div>` + bar(m.vsTarget.map((t) => ({ key: t.key, label: t.label, pct: t.want })), 'target');
   html += `<div class="mix-legend">${parts.map((p) => `<span><i style="background:${mixColor(p.key)}"></i>${esc(p.label)}<b>${pctTxt(p.pct)}</b> <span class="muted">${fmt(p.value)}</span></span>`).join('')}</div>`;
   if (m.vsTarget) {
     const off = m.vsTarget.filter((t) => Math.abs(t.diff) >= 0.01);
@@ -832,7 +846,7 @@ function renderMix() {
       : '<p class="small up">Within 1% of your target everywhere.</p>';
   }
   html += `<details class="sched"${mixOpen ? ' open' : ''}><summary>What's in each${m.guessed ? ` (${m.guessed} guessed from fund names: check them)` : ''}</summary>
-    <div class="table-wrap"><table class="mix-table"><thead><tr><th>Holding</th><th>Account</th><th class="num">Value</th><th>Kind</th></tr></thead><tbody>
+    <div class="table-wrap"><table class="mix-table"><thead><tr><th>Holding</th><th>Account</th><th class="num">Value</th><th>Kind${infoButton('blend', 'blends')}</th></tr></thead><tbody>
     ${m.items.map((it) => `<tr data-key="${esc(it.key)}"><td>${it.symbol ? `<b>${esc(it.symbol)}</b> ` : ''}${esc(it.name || '')}</td><td class="small muted">${esc(it.accounts.join(', '))}</td><td class="num">${fmt(it.value)}</td>
       <td>${it.key.startsWith('cash:') ? 'Cash' : `<select data-mix aria-label="Kind of investment">${kindOptions(it.split)}</select>${it.guessed ? '<span class="guess">guess</span>' : ''}`}</td></tr>`).join('')}
     </tbody></table></div>
@@ -900,10 +914,11 @@ $('mixBody').addEventListener('change', (ev) => {
 
 // ---------- financial health ----------
 
+const CHECK_INFO = { savings: 'savingsRate', emergency: 'emergency', dti: 'dti', housing: 'housing', multiple: 'multiple', outlook: 'outlook', retire: 'outlook', protection: 'protection', life: 'policies', disability: 'policies', umbrella: 'umbrella', docs: 'docs', beneficiaries: 'bens' };
 const STATUS = { good: ['✓', 'Good'], watch: ['!', 'Watch'], attention: ['✕', 'Needs attention'] };
 function checkTiles(list) {
   return `<div class="health">${list.map((c) => `<div class="check">
-      <div class="check-top"><span class="name">${esc(c.label)}</span>${c.status ? `<span class="status ${c.status}"><i aria-hidden="true">${STATUS[c.status][0]}</i>${STATUS[c.status][1]}</span>` : ''}</div>
+      <div class="check-top"><span class="name">${esc(c.label)}${infoButton(CHECK_INFO[c.key], c.label)}</span>${c.status ? `<span class="status ${c.status}"><i aria-hidden="true">${STATUS[c.status][0]}</i>${STATUS[c.status][1]}</span>` : ''}</div>
       ${c.status && c.value ? `<div class="val">${esc(c.value)}</div>` : !c.status && c.missing ? `<a class="add" href="#${c.tab}">${esc(c.missing)}</a>` : ''}
       ${c.guide ? `<div class="guide">Guide: ${esc(c.guide)}</div>` : ''}
       ${c.note ? `<div class="why">${esc(c.note)}</div>` : ''}
@@ -934,13 +949,13 @@ function renderProtection() {
     : '<p class="muted">List life, disability and umbrella cover first; those are what an advisor asks about. Home, auto and health are optional here.</p>';
   $('docsTable').className = 'prot-table';
   $('docsTable').innerHTML = `<thead><tr><th>Document</th><th>Status</th><th>Last reviewed</th><th>Where it's kept</th></tr></thead><tbody>
-    ${pr.docs.map((d) => `<tr data-doc="${d.key}"><td>${esc(d.label)}<span class="why">${esc(d.why)}</span></td>
+    ${pr.docs.map((d) => `<tr data-doc="${d.key}"><td>${esc(d.label)}${/Poa$/.test(d.key) ? infoButton('poa', d.label) : ''}<span class="why">${esc(d.why)}</span></td>
       <td><select data-f="status" aria-label="${esc(d.label)} status"><option value="">–</option>${Object.entries(YESNO).map(([v, l]) => `<option value="${v}"${d.status === v ? ' selected' : ''}>${l}</option>`).join('')}</select></td>
       <td><input class="yr" data-f="reviewed" inputmode="numeric" placeholder="Year" value="${d.reviewed ?? ''}" aria-label="Year reviewed">${d.stale ? '<span class="stale">review</span>' : ''}</td>
       <td><input class="where" data-f="where" maxlength="120" placeholder="e.g. Fire safe, lawyer's office" value="${esc(d.where)}" aria-label="Where it's kept"></td></tr>`).join('')}</tbody>`;
   $('bensTable').className = 'prot-table';
   $('bensTable').innerHTML = pr.beneficiaries.length
-    ? `<thead><tr><th>Account or policy</th><th>Beneficiary named?</th><th>Last checked</th></tr></thead><tbody>
+    ? `<thead><tr><th>Account or policy</th><th>Beneficiary named?${infoButton('pod', 'beneficiary forms')}</th><th>Last checked</th></tr></thead><tbody>
       ${pr.beneficiaries.map((b) => `<tr data-ben="${esc(b.key)}"><td>${esc(b.label)}</td>
         <td><select data-f="named" aria-label="Beneficiary named for ${esc(b.label)}"><option value="">–</option><option value="yes"${b.named === 'yes' ? ' selected' : ''}>Yes</option><option value="no"${b.named === 'no' ? ' selected' : ''}>No</option><option value="unsure"${b.named === 'unsure' ? ' selected' : ''}>Not sure</option></select></td>
         <td><input class="yr" data-f="checked" inputmode="numeric" placeholder="Year" value="${b.checked ?? ''}" aria-label="Year checked">${b.stale ? '<span class="stale">check again</span>' : ''}</td></tr>`).join('')}</tbody>`
@@ -1024,12 +1039,12 @@ function renderRetirement() {
       <div>Retirement savings today<b>${fmt(r.start)}</b></div>
       <div>Adding each month<b>${fmt(r.monthly)}</b></div>
       <div>At ${r.settings.retireAge} (typical)<b>${fmt(t.balance)}</b></div>
-      <div>Poor to good market<b>${fmt(o.poor.balance)} – ${fmt(o.good.balance)}</b></div>
-      ${r.needed ? `<div>Needed for your income<b>${fmt(r.needed)}</b></div>` : ''}
+      <div>Poor to good market${infoButton('typicalReturn')}<b>${fmt(o.poor.balance)} – ${fmt(o.good.balance)}</b></div>
+      ${r.needed ? `<div>Needed for your income${infoButton('withdrawal')}<b>${fmt(r.needed)}</b></div>` : ''}
     </div>
     <div class="legend"><span><i style="background:var(--s1)"></i>Typical</span><span><i class="sq" style="background:var(--s1);opacity:.18"></i>Poor to good</span>${r.needed ? '<span><i class="dash"></i>Needed</span>' : ''}</div>
     <div class="chart" id="retireChart"></div>
-    <p class="small muted">In today's dollars. Growth after inflation: typical ${r.rates.typical.toFixed(1)}% a year (${r.typicalFrom === 'entered' ? 'your figure' : `from your investment mix: stocks ${r.assumptions.returns.usStocks}%, bonds ${r.assumptions.returns.bonds}%, cash ${r.assumptions.returns.cash}%${r.assumptions.fee ? `, less fund fees of ${r.assumptions.fee.toFixed(2)}%` : ''}`}), poor ${r.rates.poor.toFixed(1)}%, good ${r.rates.good.toFixed(1)}%. Income from savings assumes drawing ${r.settings.withdrawalRate}% of them the first year, plus ${fmt(r.settings.socialSecurity || 0)} of Social Security. Contributions are assumed to keep pace with your pay. Real markets swing far more than these smooth lines; treat this as a guide for your advisor conversation, not a forecast.</p>
+    <p class="small muted">In today's dollars${infoButton('todaysDollars')}. Growth after inflation: typical ${r.rates.typical.toFixed(1)}% a year (${r.typicalFrom === 'entered' ? 'your figure' : `from your investment mix: stocks ${r.assumptions.returns.usStocks}%, bonds ${r.assumptions.returns.bonds}%, cash ${r.assumptions.returns.cash}%${r.assumptions.fee ? `, less fund fees of ${r.assumptions.fee.toFixed(2)}%` : ''}`}), poor ${r.rates.poor.toFixed(1)}%, good ${r.rates.good.toFixed(1)}%. Income from savings assumes drawing ${r.settings.withdrawalRate}% of them the first year, plus ${fmt(r.settings.socialSecurity || 0)} of Social Security. Contributions are assumed to keep pace with your pay. Real markets swing far more than these smooth lines; treat this as a guide for your advisor conversation, not a forecast.</p>
     ${sm ? `<p class="retire-note">Retirement savings are <b>${sm.have.toFixed(1)}×</b> your salary; a common rule of thumb at ${r.age} is about ${sm.guide}×.</p>` : ''}`;
   retireChart($('retireChart'), r);
 }
@@ -1110,14 +1125,14 @@ function renderFees() {
     const partial = fundsLeft.length ? ` <span class="small muted">(${f.funds} of ${f.funds + fundsLeft.length} funds so far)</span>` : '';
     head = `<div class="ytd-row">
       <div>Fund fees a year${partial}<b>${fmt(f.yearly)}</b></div>
-      <div>Weighted expense ratio<b>${f.weighted.toFixed(2)}%</b></div>
-      ${f.longRun.map((l) => `<div>Over ${l.years} years<b>${fmt(l.cost)}</b></div>`).join('')}
+      <div>Weighted expense ratio${infoButton('weighted')}<b>${f.weighted.toFixed(2)}%</b></div>
+      ${f.longRun.map((l, i) => `<div>Over ${l.years} years${i === 0 ? infoButton('feeDrag') : ''}<b>${fmt(l.cost)}</b></div>`).join('')}
     </div>
     <p class="small muted">The yearly cost is each fund's expense ratio times what you hold in it, taken out of the fund's returns rather than billed. "Over 10/20 years" is what that rate would take from today's ${fmt(f.knownValue)} if it grew 6% a year before fees, without new contributions: fees compound like growth does. ${fundsLeft.length ? `Add the ${fundsLeft.length} missing expense ratio${fundsLeft.length > 1 ? 's' : ''} to complete it.` : ''}</p>`;
   } else {
     head = `<p class="muted">Each fund charges a yearly fee, its expense ratio, taken out of its returns. Enter each fund's from your 401(k)'s fee disclosure (Paychex Flex → Retirement → Fee disclosure) or the fund's page, and FinTrack shows what you pay in dollars. Single stocks have no fund fee.</p>`;
   }
-  $('feesBody').innerHTML = head + `<div class="table-wrap"><table><thead><tr><th>Holding</th><th class="num">Value</th><th class="num">Expense ratio</th><th class="num">Per year</th></tr></thead><tbody>
+  $('feesBody').innerHTML = head + `<div class="table-wrap"><table><thead><tr><th>Holding</th><th class="num">Value</th><th class="num">Expense ratio${infoButton('expenseRatio')}</th><th class="num">Per year</th></tr></thead><tbody>
     ${f.rows.map((r) => `<tr><td><b>${esc(r.symbol)}</b> <span class="muted">${esc(r.name || '')}</span></td><td class="num">${fmt(r.value)}</td>
       <td class="num">${r.kind === 'stock' ? '<span class="muted">Stock: none</span>' : `<button class="linkish" data-fee="${esc(r.symbol)}">${r.expenseRatio == null ? 'Add' : `${r.expenseRatio.toFixed(2)}%`}</button>`}</td>
       <td class="num">${r.yearly == null ? '<span class="muted">–</span>' : fmtCents(r.yearly)}</td></tr>`).join('')}
@@ -1366,14 +1381,14 @@ function drawLoan(card, l) {
     ${l.warnings.map((x) => `<div class="notice loan-warn">${esc(x)}</div>`).join('')}
     <div class="loan-tiles">
       <div class="tile"><div class="label">Left to pay</div><div class="v">${fmt(l.balance)}</div><div class="s">${l.loan.original ? `${Math.round((1 - l.balance / l.loan.original) * 100)}% of ${fmt(l.loan.original)} paid off` : 'Principal, from your lender'}</div></div>
-      <div class="tile"><div class="label">Monthly payment</div><div class="v">${fmtCents(l.payment)}</div><div class="s">${
+      <div class="tile"><div class="label">Monthly payment${infoButton(l.escrow > 0 ? 'escrow' : 'required', 'the monthly payment')}</div><div class="v">${fmtCents(l.payment)}</div><div class="s">${
         extra ? `${fmtCents(req.payment)} due + ${fmtCents(extra)} extra${l.escrow > 0 ? `<br>Due: ${fmtCents(req.pi)} loan + ${fmtCents(l.escrow)} escrow` : ''}`
         : l.escrow > 0 ? `${fmtCents(l.pi)} loan + ${fmtCents(l.escrow)} escrow` : 'All of it goes to the loan'}</div></div>
-      <div class="tile"><div class="label">Next payment (${monthLabel(np.month)})</div>
+      <div class="tile"><div class="label">Next payment (${monthLabel(np.month)})${infoButton('principal')}</div>
         <div class="split" role="img" aria-label="Interest ${fmtCents(np.interest)}, principal ${fmtCents(np.principal)}${np.extra ? `, extra principal ${fmtCents(np.extra)}` : ''}">
           <span style="width:${(np.interest / total) * 100}%;background:var(--s2)"></span><span style="width:${(np.principal / total) * 100}%;background:var(--s1)"></span>${np.extra ? `<span style="width:${(np.extra / total) * 100}%;background:var(--s3)"></span>` : ''}</div>
         <div class="split-key"><span><i style="background:var(--s2)"></i>Interest ${fmtCents(np.interest)}</span><span><i style="background:var(--s1)"></i>Principal ${fmtCents(np.principal)}</span>${np.extra ? `<span><i style="background:var(--s3)"></i>Extra ${fmtCents(np.extra)}</span>` : ''}</div></div>
-      <div class="tile"><div class="label">Paid off</div><div class="v">${l.never ? 'Never' : monthLabel(l.payoffMonth)}</div><div class="s">${l.never ? 'The payment is too small' : `${span(l.monthsLeft)} left · ${fmt(l.interestLeft)} interest to go`}</div></div>
+      <div class="tile"><div class="label">Paid off${infoButton('payoff')}</div><div class="v">${l.never ? 'Never' : monthLabel(l.payoffMonth)}</div><div class="s">${l.never ? 'The payment is too small' : `${span(l.monthsLeft)} left · ${fmt(l.interestLeft)} interest to go`}</div></div>
     </div>
     ${extra && req.minimum && !req.minimum.never && req.monthsSooner != null ? `<p class="small">Your extra ${fmtCents(extra)} a month pays it off <b class="up">${span(req.monthsSooner)} sooner</b> than the required payment alone (${monthLabel(req.minimum.payoffMonth)}), saving <b class="up">${fmt(req.interestSaved)}</b> in interest.</p>` : ''}
     ${l.scheduled?.payoffMonth ? `<p class="small muted">Original schedule: ${fmtCents(l.scheduled.pi)} principal and interest, paid off ${monthLabel(l.scheduled.payoffMonth)}.${!l.never && l.payoffMonth < l.scheduled.payoffMonth ? ` You're ahead of it by ${span(monthsBetween(l.payoffMonth, l.scheduled.payoffMonth))}.` : ''}</p>` : ''}

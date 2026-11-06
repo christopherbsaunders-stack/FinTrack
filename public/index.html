@@ -242,7 +242,7 @@
       <p class="muted small">Split this account into the money you've set aside for each thing. Your bank only reports the total, so give each bucket an amount, except one that holds the rest: deposits and interest land there. When you move money between buckets, change the amounts here.</p>
       <div class="table-wrap">
         <table class="fund-rows bucket-form">
-          <thead><tr><th>Bucket</th><th class="num">Amount</th><th class="center">Holds the rest</th><th class="num">Goal</th><th class="center">Emergency fund</th><th></th></tr></thead>
+          <thead><tr><th>Bucket</th><th class="num">Amount</th><th class="center">Holds the rest<button type="button" class="info" data-info="rest" aria-label="About holds the rest" aria-expanded="false">i</button></th><th class="num">Goal</th><th class="center">Emergency fund</th><th></th></tr></thead>
           <tbody id="bRows"></tbody>
         </table>
       </div>
@@ -272,7 +272,7 @@
         <p class="muted small">Tick the ones that would still have to be paid if your income stopped: the emergency fund is measured against those. The first line is your spending in the accounts FinTrack tracks; leave its amount empty to use the measured average, or enter what you'd count instead.</p>
         <div class="table-wrap">
           <table class="fund-rows bucket-form">
-            <thead><tr><th>Expense</th><th class="num">Per month</th><th class="center">Essential</th><th></th></tr></thead>
+            <thead><tr><th>Expense</th><th class="num">Per month</th><th class="center">Essential<button type="button" class="info" data-info="essential" aria-label="About essential expenses" aria-expanded="false">i</button></th><th></th></tr></thead>
             <tbody id="gRows"></tbody>
           </table>
         </div>
@@ -310,12 +310,12 @@
  <dialog id="retireDlg" class="wide">
     <form id="retireForm">
       <h2>Retirement outlook</h2>
-      <p class="muted small">All amounts are in today's dollars: FinTrack works after inflation, so $6,000 a month at 65 means what $6,000 buys today.</p>
+      <p class="muted small">All amounts are in today's dollars<button type="button" class="info" data-info="todaysDollars" aria-label="About today&#39;s dollars" aria-expanded="false">i</button>: FinTrack works after inflation, so $6,000 a month at 65 means what $6,000 buys today.</p>
       <div class="form-grid">
         <label>Your birth year <input id="rBirth" inputmode="numeric" placeholder="1985" required></label>
         <label>Retire at age <input id="rAge" inputmode="numeric" value="65"></label>
         <label>Monthly income you'd want, before taxes ($) <input id="rIncome" inputmode="decimal" placeholder="e.g. 6000"></label>
-        <label>Social Security or pension, monthly ($) <input id="rSS" inputmode="decimal" placeholder="From ssa.gov/myaccount"></label>
+        <label><span>Social Security or pension, monthly ($)<button type="button" class="info" data-info="socialSecurity" aria-label="About the Social Security estimate" aria-expanded="false">i</button></span> <input id="rSS" inputmode="decimal" placeholder="From ssa.gov/myaccount"></label>
         <label>Other monthly saving toward retirement ($) <input id="rExtra" inputmode="decimal" placeholder="An IRA, for example"></label>
       </div>
       <p class="muted small">Paychex's own estimate is a good start for the income. Your Social Security estimate at your retirement age is on your account at ssa.gov (it shows today's dollars). The 401(k) contributions come from its plan, so don't count them in "other saving".</p>
@@ -323,8 +323,8 @@
       <fieldset>
         <legend>Assumptions (optional)</legend>
         <div class="form-grid">
-          <label>Typical yearly return after inflation (%) <input id="rReturn" inputmode="decimal" placeholder="From your mix"></label>
-          <label>Yearly withdrawal in retirement (%) <input id="rWithdraw" inputmode="decimal" value="4"></label>
+          <label><span>Typical yearly return after inflation (%)<button type="button" class="info" data-info="typicalReturn" aria-label="About the typical return" aria-expanded="false">i</button></span> <input id="rReturn" inputmode="decimal" placeholder="From your mix"></label>
+          <label><span>Yearly withdrawal in retirement (%)<button type="button" class="info" data-info="withdrawal" aria-label="About the withdrawal rate" aria-expanded="false">i</button></span> <input id="rWithdraw" inputmode="decimal" value="4"></label>
         </div>
         <p class="muted small" id="rReturnHint"></p>
       </fieldset>
@@ -358,7 +358,7 @@
 
  <dialog id="indexDlg">
     <form id="indexForm">
-      <h2 id="indexTitle">Follow home prices</h2>
+      <h2><span id="indexTitle">Follow home prices</span><button type="button" class="info" data-info="index" aria-label="About following home prices" aria-expanded="false">i</button></h2>
       <p class="muted small">Your home's value moves with a house price index (the FHFA House Price Index, from FRED). Each time a new quarter comes out, FinTrack scales your value by how much the index moved. When you type in a new value, it starts over from that.</p>
       <div class="form-grid">
         <label>Index <select id="ixSelect" class="index-select"></select></label>
@@ -380,8 +380,8 @@
       <div class="form-grid">
         <label>Interest rate (%) <input id="lRate" inputmode="decimal" placeholder="6.125" required></label>
         <label>What you pay each month ($) <input id="lPayment" inputmode="decimal" placeholder="2400" required></label>
-        <label>Required payment ($) <input id="lRequired" inputmode="decimal" placeholder="Amount due"></label>
-        <label id="lEscrowWrap">Escrow in it ($) <input id="lEscrow" inputmode="decimal" placeholder="Taxes, insurance, PMI"></label>
+        <label><span>Required payment ($)<button type="button" class="info" data-info="required" aria-label="About the required payment" aria-expanded="false">i</button></span> <input id="lRequired" inputmode="decimal" placeholder="Amount due"></label>
+        <label id="lEscrowWrap"><span>Escrow in it ($)<button type="button" class="info" data-info="escrow" aria-label="About escrow" aria-expanded="false">i</button></span> <input id="lEscrow" inputmode="decimal" placeholder="Taxes, insurance, PMI"></label>
       </div>
       <p class="muted small">The required payment is the amount due on your statement. If you pay more, the rest goes to principal as extra, and FinTrack shows what that saves. Leave it empty if you pay exactly what's due.</p>
       <p class="muted small" id="lEscrowNote">Escrow is the part of the payment for property taxes, homeowner's insurance and any PMI. It doesn't pay down the loan. Your statement shows it as "escrow".</p>
@@ -427,7 +427,7 @@
       <fieldset>
         <legend>What you hold</legend>
         <div class="form-grid">
-          <label>As of the close on <input id="pAsOf" type="date" required></label>
+          <label><span>As of the close on<button type="button" class="info" data-info="asOf" aria-label="About the date" aria-expanded="false">i</button></span> <input id="pAsOf" type="date" required></label>
           <label>I'm entering
             <select id="pMode"><option value="value">Value of each fund ($)</option><option value="shares">Number of shares</option></select>
           </label>
@@ -456,7 +456,7 @@
           </label>
           <label id="pDayWrap" hidden>Day of the month <input id="pDay" type="number" min="1" max="31" value="15"></label>
           <label id="pAnchorWrap" hidden>A recent payday <input id="pAnchor" type="date"></label>
-          <label>Business days until invested <input id="pLag" type="number" min="0" max="10" value="3"></label>
+          <label><span>Business days until invested<button type="button" class="info" data-info="lag" aria-label="About business days until invested" aria-expanded="false">i</button></span> <input id="pLag" type="number" min="0" max="10" value="3"></label>
         </div>
         <p class="muted small" id="pNext">Business days until invested: how long after payday the money is bought into the funds. Paid on a Friday and invested the next Wednesday is 3.</p>
       </fieldset>

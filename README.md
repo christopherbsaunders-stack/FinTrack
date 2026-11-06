@@ -20,7 +20,7 @@ npm test
 
 The first time FinTrack opens, a short tour walks through each part and what to set up (Previous, Next, Skip; arrow keys and Esc work too). Take it again from **Settings**.
 
-The dashboard has five tabs: **Overview** (net worth, its chart, assets and debts), **Investments** (the 401(k) chart, investment mix, holdings), **Savings & budget** (buckets, income and expenses, cash flow), **Loans**, and **Accounts** (every account and recent transactions), and **Insurance & estate**. The tab is part of the address (`#loans`), so a bookmark or refresh keeps it. Click a card's title (▾) to collapse it; collapsed cards stay collapsed.
+The dashboard has five tabs: **Overview** (net worth, its chart, assets and debts), **Investments** (the 401(k) chart, investment mix, holdings), **Savings & budget** (buckets, income and expenses, cash flow), **Loans**, and **Accounts** (every account and recent transactions), and **Insurance & estate**. The tab is part of the address (`#loans`), so a bookmark or refresh keeps it. Click a card's title (▾) to collapse it; collapsed cards stay collapsed. The small (i) buttons next to titles, figures and form fields explain what each is and where its numbers come from; the wording is all in `public/info.js`.
 
 ## Connect your accounts (once)
 
