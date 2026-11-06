@@ -78,10 +78,14 @@ export function healthChecks({ budget, emergency, loans, retirement, protection 
     const pc = protection.checks.filter((c) => c.status);
     if (!protection.entered) checks.push({ key: 'protection', label: 'Insurance and estate', guide: 'Life and disability cover, a will, beneficiaries named', status: null, missing: 'Fill in Insurance & estate', tab: 'protection' });
     else {
-      const ok = pc.filter((c) => c.status === 'good').length;
+      // "In place" counts what you have; the status also weighs whether it's
+      // enough (life cover against about 10x income, documents reviewed).
+      const have = pc.filter((c) => c.inPlace).length;
       const status = pc.some((c) => c.status === 'attention') ? 'attention' : pc.some((c) => c.status === 'watch') ? 'watch' : 'good';
-      const gaps = pc.filter((c) => c.status !== 'good').map((c) => c.label.toLowerCase());
-      checks.push({ key: 'protection', label: 'Insurance and estate', value: `${ok} of ${pc.length} in place`, guide: 'Life and disability cover, a will, beneficiaries named', status, note: gaps.length ? `To look at: ${gaps.join(', ')}.` : 'Everything checked is in place.' });
+      const missing = pc.filter((c) => !c.inPlace).map((c) => c.label.toLowerCase());
+      const short = pc.filter((c) => c.inPlace && c.status !== 'good').map((c) => (c.key === 'life' ? 'life insurance is below the usual guide' : c.key === 'docs' ? 'some documents are due for review' : c.key === 'beneficiaries' ? 'some beneficiaries are due for a check' : `${c.label.toLowerCase()} needs a look`));
+      const note = [missing.length ? `Not in place: ${missing.join(', ')}.` : '', short.length ? `${short[0][0].toUpperCase()}${short.join('; ').slice(1)}.` : ''].filter(Boolean).join(' ');
+      checks.push({ key: 'protection', label: 'Insurance and estate', value: `${have} of ${pc.length} in place`, guide: 'Life and disability cover, a will, beneficiaries named', status, note: note || 'Everything checked is in place.' });
     }
   }
   return checks;

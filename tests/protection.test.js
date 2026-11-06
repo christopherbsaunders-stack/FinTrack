@@ -49,3 +49,17 @@ test('input checks', () => {
   assert.throws(() => validateProtection({ docs: { will: { status: 'have', reviewed: 2099 } } }, 2026), /not in the future/);
   assert.deepEqual(validateProtection({}), { policies: [], docs: {}, beneficiaries: {} });
 });
+
+import { healthChecks } from '../src/health.js';
+
+test('a policy counts as in place even when the cover is below the guide', () => {
+  const prot = validateProtection({ policies: [{ type: 'life', who: 'Me', provider: 'Through work', coverage: 236000, work: true }] }, 2026);
+  const p = summarizeProtection(prot, { salary: 118000, accounts, thisYear: 2026 });
+  const life = p.checks.find((c) => c.key === 'life');
+  assert.equal(life.inPlace, true);
+  assert.equal(life.status, 'attention', '236k against about 1.18M');
+  const tile = healthChecks({ protection: p }).find((c) => c.key === 'protection');
+  assert.equal(tile.value, '1 of 5 in place');
+  assert.match(tile.note, /Not in place: disability insurance, umbrella liability, estate documents, beneficiaries\./);
+  assert.match(tile.note, /Life insurance is below the usual guide\./);
+});

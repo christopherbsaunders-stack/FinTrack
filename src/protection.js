@@ -46,26 +46,27 @@ export function summarizeProtection(prot, { salary = null, accounts = [], thisYe
     ...life.map((x) => ({ key: `policy:${x.id}`, label: `Life insurance · ${x.provider || x.who || 'policy'}`, ...named(`policy:${x.id}`) })),
   ].map((b) => ({ ...b, named: b.named || null, checked: b.checked || null, stale: b.named === 'yes' && b.checked && thisYear - b.checked > REVIEW_YEARS }));
 
-  // Rough checks, each with a status like the health panel's.
+  // Rough checks, each with a status like the health panel's. `inPlace` is
+// whether you have it at all; the status also weighs whether it's enough.
   const checks = [];
   const lifeGuide = salary ? salary * LIFE_MULTIPLE : null;
   checks.push({
-    key: 'life', label: 'Life insurance',
+    key: 'life', label: 'Life insurance', inPlace: life.length > 0,
     status: !life.length ? 'attention' : lifeGuide ? (lifeTotal >= lifeGuide ? 'good' : lifeTotal >= lifeGuide / 2 ? 'watch' : 'attention') : 'good',
     note: !life.length ? 'None listed.' : `${money(lifeTotal)} of cover${lifeGuide ? `; a common rule of thumb is about ${LIFE_MULTIPLE}× income (${money(lifeGuide)}), though needs vary` : ''}.`,
   });
-  checks.push({ key: 'disability', label: 'Disability insurance', status: has('disability') ? 'good' : 'watch', note: has('disability') ? 'In place.' : 'None listed. Many employers offer long-term disability; check your benefits.' });
-  checks.push({ key: 'umbrella', label: 'Umbrella liability', status: has('umbrella') ? 'good' : 'watch', note: has('umbrella') ? 'In place.' : 'None listed. Worth asking about as a homeowner, as what you own grows.' });
+  checks.push({ key: 'disability', label: 'Disability insurance', inPlace: has('disability'), status: has('disability') ? 'good' : 'watch', note: has('disability') ? 'In place.' : 'None listed. Many employers offer long-term disability; check your benefits.' });
+  checks.push({ key: 'umbrella', label: 'Umbrella liability', inPlace: has('umbrella'), status: has('umbrella') ? 'good' : 'watch', note: has('umbrella') ? 'In place.' : 'None listed. Worth asking about as a homeowner, as what you own grows.' });
   const core = docs.filter((d) => d.key !== 'trust');
   const missingDocs = core.filter((d) => d.status !== 'have');
   checks.push({
-    key: 'docs', label: 'Estate documents',
+    key: 'docs', label: 'Estate documents', inPlace: !missingDocs.length,
     status: !missingDocs.length ? (core.some((d) => d.stale) ? 'watch' : 'good') : missingDocs.length === core.length ? 'attention' : 'watch',
     note: !missingDocs.length ? (core.some((d) => d.stale) ? `In place; some not reviewed in over ${REVIEW_YEARS} years.` : 'Will, powers of attorney and directive in place.') : `Not in place or not sure: ${missingDocs.map((d) => d.label.replace(/ \(.*\)/, '')).join(', ')}.`,
   });
   const benGaps = bens.filter((b) => b.named !== 'yes');
   checks.push({
-    key: 'beneficiaries', label: 'Beneficiaries',
+    key: 'beneficiaries', label: 'Beneficiaries', inPlace: bens.length > 0 && !benGaps.length,
     status: !bens.length ? null : benGaps.length ? 'attention' : bens.some((b) => b.stale || !b.checked) ? 'watch' : 'good',
     note: !bens.length ? '' : benGaps.length ? `Not confirmed on ${benGaps.length} of ${bens.length}: ${benGaps.map((b) => (b.key.startsWith('policy:') ? b.label : b.label.split(' · ')[0])).join(', ')}.` : bens.some((b) => b.stale || !b.checked) ? `All named; check again any not reviewed in ${REVIEW_YEARS} years.` : 'Named on every account and policy.',
   });
