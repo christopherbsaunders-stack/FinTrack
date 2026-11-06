@@ -2,6 +2,7 @@
 
 import { compare, byYear, scheduledPayment, addMonths } from './loans.js';
 import { STATES } from './hpi.js';
+import { startTour } from './tour.js';
 
 const $ = (id) => document.getElementById(id);
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -46,10 +47,13 @@ async function api(path, opts = {}) {
 const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body || {}) });
 const patch = (path, body) => api(path, { method: 'PATCH', body: JSON.stringify(body) });
 
+let tourChecked = false;
 async function load() {
   try {
     data = await api('/api/summary');
     render();
+    // The first time FinTrack opens, show the tour (once; replay it from Settings).
+    if (!tourChecked) { tourChecked = true; if (!data.tourDone) tour(); }
   } catch (err) {
     $('notices').innerHTML = `<div class="notice"><b>Can't reach the FinTrack server.</b> ${esc(err.message)}</div>`;
   }
@@ -682,6 +686,10 @@ $('settingsBtn').addEventListener('click', () => {
   $('backupError').textContent = b?.error || (b?.fromEnv ? 'Set by FINTRACK_BACKUP_DIR when FinTrack was started.' : '');
   $('settings').showModal();
 });
+function tour() {
+  startTour({ done: () => { if (!data.tourDone) { data.tourDone = true; post('/api/settings', { tourDone: true }).catch(() => {}); } } });
+}
+$('tourBtn').addEventListener('click', () => { $('settings').close(); tour(); });
 $('backupSave').addEventListener('click', async () => {
   try { await post('/api/settings', { backupDir: $('backupDir').value }); await load(); $('settingsBtn').click(); }
   catch (err) { $('backupError').textContent = err.message; }

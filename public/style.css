@@ -298,3 +298,18 @@ a.btn-link:hover { border-color: var(--muted); }
 .prot-table td input.where { width: 100%; min-width: 160px; }
 .prot-table .why { display: block; font-size: 11.5px; color: var(--muted); }
 .stale { font-size: 11px; color: var(--bad); margin-left: 6px; }
+
+/* The tour: a ring around the section being explained, dimming the rest, and a pop-up beside it */
+.tour-ring { position: fixed; z-index: 40; border-radius: 12px; box-shadow: 0 0 0 3px var(--accent), 0 0 0 9999px rgba(0, 0, 0, 0.5); pointer-events: none; transition: top 0.2s, left 0.2s, width 0.2s, height 0.2s; }
+.tour-pop { position: fixed; z-index: 41; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px 14px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3); }
+.tour-pop.centered { top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100% - 32px)); }
+.tour-pop.sheet { left: 12px; right: 12px; bottom: 12px; top: auto; width: auto; max-height: 55vh; overflow: auto; }
+.tour-pop h2 { font-size: 16px; margin: 2px 0 8px; }
+.tour-text { font-size: 13.5px; line-height: 1.5; color: var(--text-2); }
+.tour-text p { margin: 0 0 8px; }
+.tour-text b { color: var(--text); }
+.tour-count { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+.tour-btns { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.tour-gap { flex: 1; }
+.tour-skip { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } }

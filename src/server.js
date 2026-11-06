@@ -224,6 +224,7 @@ const routes = [
       if (!(h >= 1 && h <= 168)) throw httpError(400, 'Sync every 1 to 168 hours.');
       state.settings.syncHours = h;
     }
+    if ('tourDone' in body) state.settings.tourDone = Boolean(body.tourDone);
     if ('reportName' in body) state.settings.reportName = String(body.reportName || '').trim().slice(0, 120);
     if ('backupDir' in body) {
       const dir = String(body.backupDir || '').trim();

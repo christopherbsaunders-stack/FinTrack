@@ -18,6 +18,8 @@ npm test
 
 ## Finding your way
 
+The first time FinTrack opens, a short tour walks through each part and what to set up (Previous, Next, Skip; arrow keys and Esc work too). Take it again from **Settings**.
+
 The dashboard has five tabs: **Overview** (net worth, its chart, assets and debts), **Investments** (the 401(k) chart, investment mix, holdings), **Savings & budget** (buckets, income and expenses, cash flow), **Loans**, and **Accounts** (every account and recent transactions), and **Insurance & estate**. The tab is part of the address (`#loans`), so a bookmark or refresh keeps it. Click a card's title (▾) to collapse it; collapsed cards stay collapsed.
 
 ## Connect your accounts (once)
@@ -135,7 +137,7 @@ src/priced.js      accounts valued from their holdings: paydays, estimates, Payc
 src/store.js       the JSON state file
 src/server.js      HTTP server, JSON API, the sync timer
 src/demo.js        made-up data for npm run demo
-public/            the dashboard (plain HTML, CSS and JS; charts drawn as SVG); report.html is the advisor report
+public/            the dashboard (plain HTML, CSS and JS; charts drawn as SVG); report.html is the advisor report, tour.js the first-run tour
 ```
 
 History starts with your first sync: SimpleFIN gives today's balances, not past ones, so the net worth chart grows a point a day. The first sync brings in the last 90 days of transactions.

@@ -105,6 +105,7 @@ export function computeSummary(state, now = new Date()) {
     hasPriced: accounts.some((a) => a.source === 'priced'),
     syncHours: state.settings?.syncHours,
     report: { name: state.settings?.reportName || '', notes: state.settings?.reportNotes || '' },
+    tourDone: Boolean(state.settings?.tourDone),
     totals: {
       netWorth, assets, liabilities,
       cash: cat('cash'),
