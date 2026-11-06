@@ -167,6 +167,7 @@ function render() {
   renderFees();
   renderBuckets();
   renderBudget();
+  renderHealth();
   $('noLoans').hidden = data.loans.length > 0 || data.accounts.some((a) => !a.hidden && a.category === 'mortgage' && !a.loan);
   applyCollapse();
   renderTransactions();
@@ -873,6 +874,21 @@ $('mixBody').addEventListener('change', (ev) => {
   act(() => api('/api/mix/class', { method: 'PUT', body: JSON.stringify({ key, split: sel.value || null }) }));
 });
 
+// ---------- financial health ----------
+
+const STATUS = { good: ['✓', 'Good'], watch: ['!', 'Watch'], attention: ['✕', 'Needs attention'] };
+function renderHealth() {
+  const list = data.health || [];
+  $('healthBody').innerHTML = `<div class="health">${list.map((c) => `<div class="check">
+      <div class="check-top"><span class="name">${esc(c.label)}</span>${c.status ? `<span class="status ${c.status}"><i aria-hidden="true">${STATUS[c.status][0]}</i>${STATUS[c.status][1]}</span>` : ''}</div>
+      ${c.status ? `<div class="val">${esc(c.value)}</div>` : `<a class="add" href="#${c.tab}">${esc(c.missing)}</a>`}
+      <div class="guide">Guide: ${esc(c.guide)}</div>
+      ${c.note ? `<div class="why">${esc(c.note)}</div>` : ''}
+    </div>`).join('')}</div>
+    ${list.some((c) => ['dti', 'housing'].includes(c.key) && c.status) && !data.budget.otherIncome ? '<p class="small muted">Debt payments and housing cost are measured against your income only. If those payments are shared, add the other household income under Income and expenses to see household figures.</p>' : ''}
+    <p class="small muted">Common rules of thumb advisors start from (CFP Board ratios, the 3 to 6 month emergency fund, savings-to-salary milestones), not verdicts: your situation, and your advisor, may weigh them differently.</p>`;
+}
+
 // ---------- retirement outlook ----------
 
 function renderRetirement() {
@@ -1176,6 +1192,7 @@ $('budgetEdit').addEventListener('click', () => {
   const g = data.budget;
   $('gSalary').value = g.salary ?? '';
   $('gOther').value = g.otherIncome ?? '';
+  $('gSaving').value = g.otherSaving ?? '';
   $('gRows').innerHTML = '';
   for (const e of g.lines) budgetRow(e);
   if (g.lines.length < 2) budgetRow();
@@ -1191,7 +1208,7 @@ $('gCancel').addEventListener('click', () => $('budgetDlg').close());
 $('budgetForm').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   try {
-    await api('/api/budget', { method: 'PUT', body: JSON.stringify({ budget: { salary: $('gSalary').value, otherIncome: $('gOther').value, expenses: budgetFormValue() } }) });
+    await api('/api/budget', { method: 'PUT', body: JSON.stringify({ budget: { salary: $('gSalary').value, otherIncome: $('gOther').value, otherSaving: $('gSaving').value, expenses: budgetFormValue() } }) });
     $('budgetDlg').close();
     await load();
   } catch (err) { $('gError').textContent = err.message; }

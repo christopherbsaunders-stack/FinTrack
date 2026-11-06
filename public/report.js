@@ -74,6 +74,18 @@ function render() {
   if (monthlyDebt) figs.push(['Loan payments', `${fmt(monthlyDebt)}/mo`, `${data.loans.length} loan${data.loans.length > 1 ? 's' : ''}, escrow included`]);
   parts.push(`<section><h2>At a glance</h2><div class="figures">${figs.map(([l, v, s, main]) => `<div class="fig${main ? ' main' : ''}"><div class="l">${l}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`).join('')}</div></section>`);
 
+  // ----- financial health -----
+  const checks = (data.health || []).filter((c) => c.status);
+  if (checks.length) {
+    const word = { good: 'Good', watch: 'Watch', attention: 'Needs attention' };
+    const mark = { good: '✓', watch: '!', attention: '✕' };
+    parts.push(`<section><h2>Financial health</h2>
+      <table><thead><tr><th>Check</th><th class="n">Now</th><th>Usual guide</th><th>Status</th></tr></thead><tbody>
+      ${checks.map((c) => `<tr><td>${esc(c.label)}${c.note ? `<div class="muted small">${esc(c.note)}</div>` : ''}</td><td class="n"><b>${esc(c.value)}</b></td><td class="small">${esc(c.guide)}</td><td>${mark[c.status]} ${word[c.status]}</td></tr>`).join('')}
+      </tbody></table>
+      <p class="note">Common rules of thumb, not verdicts.${checks.some((c) => ['dti', 'housing'].includes(c.key)) && !data.budget?.otherIncome ? ' Debt and housing ratios are measured against the owner\'s income only; some of those payments are shared.' : ''}</p></section>`);
+  }
+
   // ----- net worth over time -----
   if (data.history.length >= 2) {
     const h = data.history;

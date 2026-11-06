@@ -35,6 +35,7 @@ test('the measured line follows measured spending until you set it', () => {
   assert.equal(c.all, 1500);
   // Validation always keeps exactly one measured line.
   assert.equal(validateBudget({ expenses: [{ name: 'Rent', amount: 1 }] }).expenses[0].measured, true);
+  assert.equal(validateBudget({ otherSaving: '$500' }).otherSaving, 500);
   assert.throws(() => validateBudget({ expenses: [{ name: 'Rent', amount: '' }] }), /monthly amount for Rent/);
   assert.throws(() => validateBudget({ salary: 'lots' }), /salary/);
 });

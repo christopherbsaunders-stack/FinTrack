@@ -9,6 +9,7 @@ import { computeBudget, ratios } from './budget.js';
 import { computeMix } from './mix.js';
 import { computeFees } from './fees.js';
 import { project, typicalReturn, REAL_RETURNS, SPREAD } from './retirement.js';
+import { healthChecks } from './health.js';
 
 const DAY = 86400000;
 const FLOW_CATEGORIES = new Set(['cash', 'creditCard']);
@@ -87,6 +88,7 @@ export function computeSummary(state, now = new Date()) {
     ...Object.fromEntries(Object.entries(state.prices || {}).map(([t, p]) => [t, { type: p.type || null }])),
     ...(state.symbolInfo || {}),
   });
+  const retirement = retirementOutlook(state, visible, mix, fees, retirementPerYear, budget, now);
 
   return {
     generatedAt: now.toISOString(),
@@ -123,7 +125,8 @@ export function computeSummary(state, now = new Date()) {
     emergency,
     budget,
     mix,
-    retirement: retirementOutlook(state, visible, mix, fees, retirementPerYear, budget, now),
+    retirement,
+    health: healthChecks({ budget, emergency, loans, retirement }),
     fees,
     categories: CATEGORY_ORDER.map((id) => ({ id, ...CATEGORIES[id] })),
   };

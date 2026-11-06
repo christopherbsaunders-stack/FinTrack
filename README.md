@@ -49,6 +49,8 @@ A **value vs. money put in** chart shows the account's value each trading day ag
 
 **Gains on stocks.** Brokerages send shares and market value (the price shown is value ÷ shares). Robinhood doesn't send what you paid, so its holdings show **Add cost**: enter your average cost per share (in Robinhood: open the stock, "Your average cost") and the Gain column shows the gain and percent from then on, using your current shares. Click the gain to change it when you buy more and the average changes. A cost your brokerage does send always wins.
 
+**Financial health.** At the top of Overview, the checks advisors make first, each with your number, the usual guide and a status (Good, Watch, Needs attention): savings rate (401(k) with the match, plus what you save elsewhere, against gross income; 15% or more), emergency fund (3 to 6 months of essentials), debt payments (36% of income or less), housing cost (28% or less), retirement savings against salary (a common rule of thumb for your age) and the retirement outlook. Missing numbers link to where they go. The advisor report starts with the same table.
+
 **Retirement outlook.** At the top of the Investments tab: enter your birth year, retirement age, the monthly income you'd want and your Social Security estimate (ssa.gov). FinTrack projects your retirement accounts (and brokerage, if you choose) with your 401(k) plan's contributions plus any other saving, in today's dollars, under poor, typical and good markets (typical from your investment mix less fund fees; you can set your own), and compares it with the savings your income needs at a 4% withdrawal rate: on track, or short by how much, and what would close the gap (save more a month, or retire later). It also shows retirement savings as a multiple of salary against a common rule of thumb. The advisor report includes it.
 
 **What your investments cost.** On the Investments tab, enter each fund's expense ratio once (for a 401(k), from the plan's fee disclosure; Paychex Flex has a Fee disclosure link): FinTrack shows what each costs a year in dollars, the total, the weighted expense ratio, and what that rate would take over 10 and 20 years at 6% growth before fees. Single stocks are recognized from their price data and have no fund fee; ETFs and mutual funds ask for one. The advisor report includes it.
@@ -102,6 +104,7 @@ src/sync.js        merge a fetch into the state; record today's value of every a
 src/classify.js    categories (asset or debt) and the guess from an account's name
 src/summary.js     totals, history, cash flow, holdings for the dashboard (pure, tested)
 src/buckets.js     splitting an account into buckets; emergency fund months
+src/health.js      the financial health checks and their guides
 src/retirement.js  the retirement projection: poor, typical, good; what closes a gap
 src/fees.js        fund expense ratios in dollars, and their cost over the years
 src/mix.js         investment mix: stocks, bonds, cash; guesses from fund names; target
